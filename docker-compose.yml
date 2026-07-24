@@ -1,0 +1,10 @@
+services:
+  dip:
+    build: .
+    image: distributor-intelligence-platform
+    container_name: dip
+    ports:
+      - "5000:5000"
+    environment:
+      - MPLBACKEND=Agg
+    restart: unless-stopped
