@@ -11,7 +11,7 @@ customer, or transaction. There is no third-party dataset dependency.
 - **NumPy** — BSD-3-Clause
 - **SciPy** — BSD-3-Clause (`scipy.optimize.milp`, `linprog`, HiGHS backend)
 - **OR-Tools** — Apache-2.0 (constraint programming / CVRP routing)
-- **pandas** — BSD-3-Clause
+- **gunicorn** — MIT (WSGI server for the container image)
 - **matplotlib** — matplotlib license (BSD-compatible; used for PDF export)
 - **openpyxl** — MIT (Excel export)
 

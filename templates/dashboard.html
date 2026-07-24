@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Distributor Intelligence Platform</title>
+  <meta name="description" content="Decision-intelligence command center for a distributor: KPIs, forecast, margin, assortment, pricing and delivery routing in one place." />
+  <link rel="preconnect" href="/" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6bff'/%3E%3Ctext x='16' y='22' font-size='16' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EDI%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">DI</div>
+      <div>
+        <div class="name">Distributor IQ</div>
+        <div class="sub">Intelligence Platform</div>
+      </div>
+    </div>
+    <a class="nav-item active" data-target="sec-overview"><span class="dot"></span> Overview</a>
+    <a class="nav-item" data-target="sec-forecast"><span class="dot"></span> Demand forecast</a>
+    <a class="nav-item" data-target="sec-margin"><span class="dot"></span> Margin bridge</a>
+    <a class="nav-item" data-target="sec-portfolio"><span class="dot"></span> Portfolio (ABC-XYZ)</a>
+    <a class="nav-item" data-target="sec-assortment"><span class="dot"></span> Assortment</a>
+    <a class="nav-item" data-target="sec-routes"><span class="dot"></span> Delivery routes</a>
+    <a class="nav-item" data-target="sec-segments"><span class="dot"></span> Customer segments</a>
+    <a class="nav-item" data-target="sec-actions"><span class="dot"></span> Recommended actions</a>
+    <div class="nav-spacer"></div>
+    <div class="nav-foot">
+      Synthetic data, generated deterministically.<br />
+      &copy; 2026 Dimitres Kisimov &middot; MIT
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1>Command Center</h1>
+        <div class="crumb">Distributor Intelligence Platform &middot; unified analytics, forecasting &amp; optimisation</div>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn" href="/api/export/excel">Export Excel</a>
+        <a class="btn primary" href="/api/export/pdf">Executive PDF</a>
+        <button class="btn icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">◐</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- KPI row -->
+      <section id="sec-overview" class="kpi-row">
+        <div class="kpi">
+          <div class="label">Revenue (24 mo)</div>
+          <div class="value" id="kpi-revenue">—</div>
+          <div class="delta" id="kpi-revenue-sub">gross of returns</div>
+        </div>
+        <div class="kpi green">
+          <div class="label">Gross margin</div>
+          <div class="value" id="kpi-margin">—</div>
+          <div class="delta" id="kpi-margin-sub">—</div>
+        </div>
+        <div class="kpi amber">
+          <div class="label">YoY growth</div>
+          <div class="value" id="kpi-yoy">—</div>
+          <div class="delta" id="kpi-yoy-sub">last 12 vs prior 12</div>
+        </div>
+        <div class="kpi pink">
+          <div class="label">Expected uplift</div>
+          <div class="value" id="kpi-uplift">—</div>
+          <div class="delta up" id="kpi-uplift-sub">from the plan</div>
+        </div>
+        <div class="kpi">
+          <div class="label">OTIF service</div>
+          <div class="value" id="kpi-otif">—</div>
+          <div class="delta" id="kpi-otif-sub">on-time in-full</div>
+        </div>
+      </section>
+
+      <div class="grid">
+        <!-- Revenue + forecast -->
+        <div class="card col-8" id="sec-forecast">
+          <div class="card-head">
+            <div class="card-title">Revenue &amp; demand forecast</div>
+            <span class="pill blue" id="forecast-pill">MASE —</span>
+          </div>
+          <canvas id="forecastChart" height="300"></canvas>
+          <div class="legend">
+            <span class="lg"><span class="sw" style="background:#2f6bff"></span> Actual revenue</span>
+            <span class="lg"><span class="sw" style="background:#1d9e6f"></span> Holt-Winters forecast</span>
+            <span class="lg"><span class="sw" style="background:rgba(29,158,111,.25)"></span> ~80% band</span>
+          </div>
+        </div>
+
+        <!-- Revenue by region/category -->
+        <div class="card col-4">
+          <div class="card-head">
+            <div class="card-title">Revenue by region</div>
+            <div class="seg" id="breakdownSeg">
+              <button class="active" data-dim="region">Region</button>
+              <button data-dim="category">Category</button>
+              <button data-dim="channel">Channel</button>
+            </div>
+          </div>
+          <div class="bars" id="breakdownBars"></div>
+        </div>
+
+        <!-- Margin waterfall -->
+        <div class="card col-7" id="sec-margin">
+          <div class="card-head">
+            <div class="card-title">Gross-margin bridge (H1 → H2)</div>
+            <span class="card-note">price / volume / mix decomposition</span>
+          </div>
+          <canvas id="marginChart" height="280"></canvas>
+        </div>
+
+        <!-- ABC-XYZ heatmap -->
+        <div class="card col-5" id="sec-portfolio">
+          <div class="card-head">
+            <div class="card-title">Portfolio ABC-XYZ</div>
+            <span class="card-note">revenue Pareto × demand variability</span>
+          </div>
+          <div class="heat" id="heat"></div>
+          <div class="legend">
+            <span class="lg">A/B/C = revenue tier &middot; X/Y/Z = demand stability</span>
+          </div>
+        </div>
+
+        <!-- Assortment optimiser -->
+        <div class="card col-7" id="sec-assortment">
+          <div class="card-head">
+            <div class="card-title">Assortment optimiser (MILP vs greedy)</div>
+            <span class="pill" id="assort-pill">—</span>
+          </div>
+          <div class="slider-wrap">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);font-weight:600">
+              <span>Working-capital budget</span>
+              <span id="budgetLabel">—</span>
+            </div>
+            <input type="range" id="budgetSlider" min="15" max="100" value="40" step="1" />
+            <div class="stat-pair">
+              <div class="s"><span class="n" id="assort-count">—</span><span class="l">SKUs carried</span></div>
+              <div class="s"><span class="n" id="assort-margin">—</span><span class="l">margin captured (MILP)</span></div>
+              <div class="s"><span class="n" style="color:var(--green)" id="assort-uplift">—</span><span class="l">vs greedy baseline</span></div>
+            </div>
+          </div>
+          <canvas id="assortChart" height="150" style="margin-top:14px"></canvas>
+        </div>
+
+        <!-- Delivery routes -->
+        <div class="card col-5" id="sec-routes">
+          <div class="card-head">
+            <div class="card-title">Delivery routing</div>
+            <div class="seg" id="routeSeg">
+              <button class="active" data-mode="optimized">OR-Tools</button>
+              <button data-mode="baseline">Nearest-nb</button>
+            </div>
+          </div>
+          <canvas id="routeChart" height="260"></canvas>
+          <div class="stat-pair">
+            <div class="s"><span class="n" id="route-km">—</span><span class="l" id="route-km-l">km this run</span></div>
+            <div class="s"><span class="n" style="color:var(--green)" id="route-saved">—</span><span class="l">km saved vs baseline</span></div>
+            <div class="s"><span class="n" id="route-veh">—</span><span class="l">vehicles</span></div>
+          </div>
+        </div>
+
+        <!-- Customer segments -->
+        <div class="card col-5" id="sec-segments">
+          <div class="card-head">
+            <div class="card-title">Customer segments (RFM)</div>
+            <span class="card-note">by monetary value</span>
+          </div>
+          <div class="bars" id="rfmBars"></div>
+        </div>
+
+        <!-- Recommended actions -->
+        <div class="card col-7" id="sec-actions">
+          <div class="card-head">
+            <div class="card-title">Recommended actions</div>
+            <span class="pill green" id="actions-total">—</span>
+          </div>
+          <div class="actions" id="actions"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="tooltip"></div>
+
+<script>
+  window.__INITIAL__ = {
+    kpis: {{ kpis | tojson }},
+    plan: {{ plan | tojson }},
+    view: {{ view | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

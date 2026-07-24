@@ -25,3 +25,7 @@ Thumbs.db
 # Runtime
 *.log
 instance/
+
+# Generated deliverables + scratch data
+deliverables/
+_mnist/

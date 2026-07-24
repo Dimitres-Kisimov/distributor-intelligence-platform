@@ -169,20 +169,23 @@ def _distance_matrix(points: list[tuple[float, float]]) -> np.ndarray:
     return np.sqrt((diff**2).sum(axis=2))
 
 
-def _nn_cvrp_length(dist: np.ndarray, demands: list[int], capacity: float) -> float:
+def _nn_cvrp(dist: np.ndarray, demands: list[int], capacity: float) -> tuple[float, list[list[int]]]:
     """Capacity-aware nearest-neighbour construction (the CVRP baseline).
 
     Builds routes greedily: from the depot repeatedly hop to the nearest
     unvisited customer that still fits the vehicle's remaining capacity; when
     none fits, return to the depot and dispatch the next vehicle. This is the
-    fair apples-to-apples baseline for the OR-Tools CVRP solution.
+    fair apples-to-apples baseline for the OR-Tools CVRP solution. Returns the
+    total distance and the node sequences (each starting and ending at 0).
     """
     n = dist.shape[0]
     unvisited = set(range(1, n))
     total = 0.0
+    routes: list[list[int]] = []
     while unvisited:
         cur = 0
         load = 0.0
+        seq = [0]
         while True:
             feasible = [j for j in unvisited if load + demands[j] <= capacity]
             if not feasible:
@@ -191,9 +194,12 @@ def _nn_cvrp_length(dist: np.ndarray, demands: list[int], capacity: float) -> fl
             total += dist[cur, nxt]
             load += demands[nxt]
             cur = nxt
+            seq.append(nxt)
             unvisited.remove(nxt)
         total += dist[cur, 0]  # return to depot
-    return float(total)
+        seq.append(0)
+        routes.append(seq)
+    return float(total), routes
 
 
 def optimize_routes(ds: Dataset | None = None, n_vehicles: int = 6, capacity_kg: float = 2200.0) -> dict:
@@ -204,7 +210,7 @@ def optimize_routes(ds: Dataset | None = None, n_vehicles: int = 6, capacity_kg:
     depot = ds.depot
     stops = ds.route_stops
     points = [(depot["x"], depot["y"])] + [(s["x"], s["y"]) for s in stops]
-    demands = [0] + [int(math.ceil(s["demand_kg"])) for s in stops]
+    demands = [0] + [math.ceil(s["demand_kg"]) for s in stops]
     dist = _distance_matrix(points)
     scale = 100  # OR-Tools works in integers
     idist = np.round(dist * scale).astype(int)
@@ -273,11 +279,35 @@ def optimize_routes(ds: Dataset | None = None, n_vehicles: int = 6, capacity_kg:
                 )
                 total_km += route_km
 
-    baseline_km = _nn_cvrp_length(dist, demands, capacity_kg)
+    baseline_km, baseline_seqs = _nn_cvrp(dist, demands, capacity_kg)
+
+    def _node_point(node: int) -> dict:
+        if node == 0:
+            return {"id": "DEPOT", "x": depot["x"], "y": depot["y"]}
+        return {
+            "id": stops[node - 1]["customer_id"],
+            "name": stops[node - 1]["name"],
+            "x": stops[node - 1]["x"],
+            "y": stops[node - 1]["y"],
+        }
+
+    baseline_routes = []
+    for v, seq in enumerate(baseline_seqs):
+        seg_km = sum(dist[seq[i], seq[i + 1]] for i in range(len(seq) - 1))
+        baseline_routes.append(
+            {
+                "vehicle": v,
+                "stops": [_node_point(n) for n in seq],
+                "load_kg": round(float(sum(demands[n] for n in seq)), 1),
+                "distance_km": round(float(seg_km), 2),
+            }
+        )
+
     saved = baseline_km - total_km
     return {
         "depot": {"x": depot["x"], "y": depot["y"]},
         "routes": routes,
+        "baseline_routes": baseline_routes,
         "n_vehicles_used": len(routes),
         "capacity_kg": capacity_kg,
         "optimized_km": round(total_km, 2),
