@@ -124,5 +124,5 @@ run; the directory is a placeholder until then.
 
 ## Author & licence
 
-Dimitres Kisimov, 2026. MIT licensed. See `CREDITS.md` for the open-source
+Dimitres Kisimov, 2026. © 2026 Dimitres Kisimov — all rights reserved; published for portfolio review. See LICENSE. See `CREDITS.md` for the open-source
 components and `docs/BUSINESS_CASE.md` for the business framing.
