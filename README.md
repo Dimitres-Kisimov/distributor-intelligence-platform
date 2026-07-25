@@ -106,8 +106,9 @@ budget, price guardrail) compute per request.
 
 ## Screenshots
 
-Dashboard screenshots live in `docs/img/` — I add those by hand after a fresh
-run; the directory is a placeholder until then.
+![Command Center dashboard — KPI tiles, revenue and demand forecast with confidence band, revenue by region, gross-margin bridge and the ABC-XYZ portfolio matrix](docs/img/command-center.png)
+
+Captured from a fresh local run (`python app.py`, synthetic seeded data).
 
 ## Synthetic data & limitations
 
