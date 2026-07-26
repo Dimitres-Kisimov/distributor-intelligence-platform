@@ -9,6 +9,16 @@ those decisions deserve: one place where the descriptive numbers, the forecast,
 and the actual optimisation of price / assortment / routing all live behind a
 single API and a single dashboard.
 
+![Command Center dashboard — KPI tiles, revenue and demand forecast with confidence band, revenue by region, gross-margin bridge and the ABC-XYZ portfolio matrix](docs/img/command-center.png)
+
+*Captured from a fresh local run (`python app.py`, synthetic seeded data).*
+
+Three headline numbers, straight from the engines on the seeded synthetic
+dataset (full table and caveats below): forecast **MASE 0.38** over 9 rolling
+folds, **25.0% routing km saved** vs the nearest-neighbour baseline, and an
+expected annual uplift of **EUR 136,972** (8.4% of annual gross margin) —
+modelled on synthetic data, not a real-world claim.
+
 Everything runs on a **synthetic, deterministic dataset** (seeded NumPy, built
 in `dip/data.py`) — roughly 200 SKUs across 8 categories, 52 delivery
 customers, and 24 months of demand history. It represents no real company. That
@@ -131,12 +141,6 @@ exactly once at startup, the prescription plan is composed *from* those cached
 results, and the PDF/Excel endpoints and the `--deliverables` CLI reuse the
 same plan object — the routes view, the action cards and the exports cannot
 quote different numbers for the same scenario.
-
-## Screenshots
-
-![Command Center dashboard — KPI tiles, revenue and demand forecast with confidence band, revenue by region, gross-margin bridge and the ABC-XYZ portfolio matrix](docs/img/command-center.png)
-
-Captured from a fresh local run (`python app.py`, synthetic seeded data).
 
 ## Synthetic data & limitations
 
