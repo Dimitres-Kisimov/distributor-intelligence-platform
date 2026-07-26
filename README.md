@@ -51,7 +51,7 @@ the same values:
 | Assortment: MILP vs greedy | EUR 935,527 vs EUR 934,503 margin (+EUR 1,024) on 108 SKUs under a EUR 10,558 working-capital budget |
 | Pricing uplift | +EUR 95,609 (+6.4% of gross profit) |
 | Routing | 420 km vs 560 km baseline — 140 km / 25.0% saved per run, 6 vehicles |
-| **Expected annual uplift** | **EUR 136,972 (4.2% of gross margin)** |
+| **Expected annual uplift** | **EUR 136,972 (8.4% of annual gross margin)** |
 
 A note of honesty on those: the assortment MILP only edges out the greedy
 heuristic by ~EUR 1k here — knapsack-style problems with this cost structure

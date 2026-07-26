@@ -52,7 +52,7 @@ One platform that turns that ERP data into decisions:
 | Pricing (elasticity-guided) | EUR 95,609 |
 | Routing (CVRP vs nearest-neighbour) | EUR 40,339 |
 | Assortment (MILP vs greedy) | EUR 1,024 |
-| **Total expected annual uplift** | **EUR 136,972 — 4.2% of gross margin** |
+| **Total expected annual uplift** | **EUR 136,972 — 8.4% of annual gross margin** |
 
 The platform is a few hundred lines of Python plus a Flask app; against a
 six-figure recurring uplift the payback is immediate. The value is the decision
