@@ -22,7 +22,10 @@ Four things, layered:
 
 1. **Describe** — headline KPIs, revenue breakdowns (region / category /
    channel), an ABC-XYZ inventory classification, RFM customer segmentation,
-   and a price/volume/mix gross-margin bridge.
+   and a price/volume/mix gross-margin bridge. The ABC-XYZ cells and RFM
+   segment bars drill down to the underlying SKU and customer tables, so "CZ
+   is dead weight" resolves to actual SKU names and "call the at-risk
+   accounts" to actual customers.
 2. **Forecast** — monthly revenue projected six months out with an additive
    Holt-Winters model, with the error *earned* through a rolling-origin
    backtest rather than asserted.
@@ -32,7 +35,11 @@ Four things, layered:
    OR-Tools CVRP for the delivery run (vs nearest-neighbour construction).
 4. **Prescribe** — the composition layer that rolls the three lifts into one
    expected annual € uplift and a set of ranked "recommended action" cards, and
-   emits an executive PDF and Excel workbook from the exact same plan.
+   emits an executive PDF and Excel workbook from the exact same plan. The
+   dashboard can pin the plan on screen and compare it against any other
+   budget/guardrail scenario side by side with a modelled uplift delta
+   (routing is solved once at startup and is identical in both scenarios, so
+   the delta comes from pricing and assortment — the compare strip says so).
 
 ## The numbers it currently produces
 
