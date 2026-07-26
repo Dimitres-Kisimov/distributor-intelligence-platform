@@ -40,12 +40,25 @@ def _eur(x: float) -> str:
     return f"EUR {x:,.0f}"
 
 
-def build_pdf() -> bytes:
-    """Render the executive-review PDF and return its bytes."""
+def _scenario_line(plan: dict) -> str:
+    """One line naming the scenario a deliverable was computed for."""
+    budget_pct = plan["budget"] / plan["full_capital"] if plan.get("full_capital") else 0.0
+    return (
+        f"Scenario: working-capital budget {_eur(plan['budget'])} of {_eur(plan['full_capital'])} "
+        f"({budget_pct:.0%}), price guardrail +/-{plan['max_change']:.0%}"
+    )
+
+
+def build_pdf(budget: float | None = None, max_change: float = 0.15) -> bytes:
+    """Render the executive-review PDF for the given scenario and return its bytes.
+
+    ``budget`` / ``max_change`` mirror the dashboard controls so the exported
+    deck matches what was on screen when the user clicked Export.
+    """
     ds = build_dataset()
     k = kpis(ds)
     fc = forecast_revenue(ds)
-    plan = build_plan(ds)
+    plan = build_plan(ds, budget=budget, max_change=max_change)
     mb = margin_bridge(ds)
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
@@ -58,8 +71,9 @@ def build_pdf() -> bytes:
         fig.text(0.06, 0.90, "Distributor Intelligence Platform", fontsize=26, weight="bold", color=INK)
         fig.text(0.06, 0.855, "Executive decision review", fontsize=14, color=GREY)
         fig.text(0.06, 0.80, f"Expected annual uplift: {_eur(plan['expected_uplift_eur'])} "
-                             f"({plan['expected_uplift_pct']:.1%} of gross margin)",
+                             f"({plan['expected_uplift_pct']:.1%} of annual gross margin)",
                  fontsize=15, color=GREEN, weight="bold")
+        fig.text(0.06, 0.765, _scenario_line(plan), fontsize=10.5, color=GREY)
 
         tiles = [
             ("Revenue (24 mo)", _eur(k["revenue"])),
@@ -136,19 +150,19 @@ def build_pdf() -> bytes:
     return buf.getvalue()
 
 
-def build_excel() -> bytes:
-    """Render the multi-sheet workbook and return its bytes."""
+def build_excel(budget: float | None = None, max_change: float = 0.15) -> bytes:
+    """Render the multi-sheet workbook for the given scenario and return its bytes."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
     ds = build_dataset()
     k = kpis(ds)
     fc = forecast_revenue(ds)
-    plan = build_plan(ds)
+    plan = build_plan(ds, budget=budget, max_change=max_change)
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
-    assort = optimize_assortment(ds)
-    prices = optimize_prices(ds)
+    assort = optimize_assortment(ds, budget=budget)
+    prices = optimize_prices(ds, max_change=max_change)
     rfm = rfm_segments(ds)
 
     wb = Workbook()
@@ -166,15 +180,19 @@ def build_excel() -> bytes:
     ws.title = "Summary"
     ws["A1"] = "Distributor Intelligence Platform - Executive Summary"
     ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = _scenario_line(plan)
+    ws["A2"].font = Font(italic=True, size=10, color="6B7488")
     rows = [
         ("Revenue (24 mo)", k["revenue"]),
         ("Gross margin", k["gross_margin"]),
         ("Gross margin %", k["gross_margin_pct"]),
         ("YoY growth", k["yoy"]),
-        ("OTIF service", k["otif"]),
+        ("OTIF service (modelled)", k["otif"]),
         ("Forecast MASE", fc["mase"]),
+        ("Scenario: working-capital budget (EUR)", plan["budget"]),
+        ("Scenario: price guardrail (+/-)", plan["max_change"]),
         ("Expected annual uplift (EUR)", plan["expected_uplift_eur"]),
-        ("Uplift % of gross margin", plan["expected_uplift_pct"]),
+        ("Uplift % of annual gross margin", plan["expected_uplift_pct"]),
     ]
     _header(ws, 3, ["Metric", "Value"])
     for i, (m, v) in enumerate(rows, start=4):

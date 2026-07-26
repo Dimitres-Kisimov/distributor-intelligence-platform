@@ -16,8 +16,18 @@ API  : ``/api/kpis`` ``/api/forecast`` ``/api/margin-bridge`` ``/api/abc-xyz``
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
-from flask import Flask, Response, jsonify, render_template, request
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    make_response,
+    render_template,
+    request,
+)
 from flask.json.provider import DefaultJSONProvider
 
 from dip import analytics, exports, forecast, optimize, prescribe
@@ -56,6 +66,30 @@ CACHE = {
     "routes": optimize.optimize_routes(DS),
     "prescribe": prescribe.build_plan(DS),
 }
+
+
+DEFAULT_MAX_CHANGE = 0.15
+
+
+def _float_arg(name: str, default: float | None = None) -> float | None:
+    """Parse a float query parameter strictly: absent -> default, junk -> 400.
+
+    Flask's ``type=float`` silently swallows unparseable values (returning the
+    default), which hands API consumers a valid-looking answer to an invalid
+    question. Reject non-numeric and non-finite input explicitly instead.
+    """
+    raw = request.args.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value):
+        abort(make_response(
+            jsonify({"error": f"query parameter '{name}' must be a finite number, got {raw!r}"}), 400
+        ))
+    return value
 
 
 # ---- HTML ------------------------------------------------------------------
@@ -112,14 +146,14 @@ def api_revenue():
 
 @app.route("/api/optimize/assortment")
 def api_assortment():
-    budget = request.args.get("budget", type=float)
+    budget = _float_arg("budget")
     return jsonify(optimize.optimize_assortment(DS, budget=budget))
 
 
 @app.route("/api/optimize/prices")
 def api_prices():
-    max_change = request.args.get("max_change", default=0.15, type=float)
-    if max_change == 0.15:
+    max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
+    if max_change == DEFAULT_MAX_CHANGE:
         return jsonify(CACHE["prices"])
     return jsonify(optimize.optimize_prices(DS, max_change=max_change))
 
@@ -131,15 +165,27 @@ def api_routes():
 
 @app.route("/api/prescribe")
 def api_prescribe():
-    budget = request.args.get("budget", type=float)
-    if budget is None:
+    budget = _float_arg("budget")
+    max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
+    if budget is None and max_change == DEFAULT_MAX_CHANGE:
         return jsonify(CACHE["prescribe"])
-    return jsonify(prescribe.build_plan(DS, budget=budget))
+    # Routing is independent of both knobs; pricing is reusable when the
+    # guardrail is the default. Passing the cached results keeps the live
+    # slider/guardrail recompute fast (assortment MILP + pricing only).
+    return jsonify(prescribe.build_plan(
+        DS,
+        budget=budget,
+        max_change=max_change,
+        routes=CACHE["routes"],
+        prices=CACHE["prices"] if max_change == DEFAULT_MAX_CHANGE else None,
+    ))
 
 
 @app.route("/api/export/pdf")
 def api_export_pdf():
-    data = exports.build_pdf()
+    budget = _float_arg("budget")
+    max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
+    data = exports.build_pdf(budget=budget, max_change=max_change)
     return Response(
         data,
         mimetype="application/pdf",
@@ -149,7 +195,9 @@ def api_export_pdf():
 
 @app.route("/api/export/excel")
 def api_export_excel():
-    data = exports.build_excel()
+    budget = _float_arg("budget")
+    max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
+    data = exports.build_excel(budget=budget, max_change=max_change)
     return Response(
         data,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

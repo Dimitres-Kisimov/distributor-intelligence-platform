@@ -18,15 +18,27 @@ ROUTING_RUNS_PER_YEAR = 250
 COST_PER_KM = 1.15
 
 
-def build_plan(ds: Dataset | None = None, budget: float | None = None) -> dict:
-    """Run every engine and assemble the unified plan."""
+def build_plan(
+    ds: Dataset | None = None,
+    budget: float | None = None,
+    max_change: float = 0.15,
+    routes: dict | None = None,
+    prices: dict | None = None,
+) -> dict:
+    """Run every engine and assemble the unified plan.
+
+    ``budget`` is the assortment working-capital budget; ``max_change`` the
+    price guardrail passed to the pricing engine. Callers that already hold a
+    routing result (independent of both knobs) or a pricing result *computed
+    with the same* ``max_change`` can pass them in to skip the re-solve.
+    """
     ds = ds or build_dataset()
 
     k = kpis(ds)
     fc = forecast_revenue(ds)
     assort = optimize_assortment(ds, budget=budget)
-    prices = optimize_prices(ds)
-    routes = optimize_routes(ds)
+    prices = prices if prices is not None else optimize_prices(ds, max_change=max_change)
+    routes = routes if routes is not None else optimize_routes(ds)
 
     # --- € uplift per lever (all annualised) --------------------------------
     pricing_uplift = prices["uplift"]
@@ -35,6 +47,10 @@ def build_plan(ds: Dataset | None = None, budget: float | None = None) -> dict:
     total_uplift = pricing_uplift + assortment_uplift + routing_uplift
 
     baseline_margin = k["gross_margin"]
+    # The uplift is annual, so quote it against *annual* gross margin, not the
+    # full multi-month horizon total (24 months would understate the ratio 2x).
+    horizon_months = len(k["months"]) or 12
+    annual_gross_margin = baseline_margin * 12.0 / horizon_months
 
     cards = [
         {
@@ -90,15 +106,20 @@ def build_plan(ds: Dataset | None = None, budget: float | None = None) -> dict:
 
     return {
         "baseline_gross_margin": round(baseline_margin, 2),
+        "annual_gross_margin": round(annual_gross_margin, 2),
         "expected_uplift_eur": round(total_uplift, 2),
-        "expected_uplift_pct": round(total_uplift / baseline_margin, 4) if baseline_margin else 0.0,
+        "expected_uplift_pct": round(total_uplift / annual_gross_margin, 4) if annual_gross_margin else 0.0,
         "levers": {
             "pricing": round(pricing_uplift, 2),
             "assortment": round(assortment_uplift, 2),
             "routing": round(routing_uplift, 2),
         },
+        "budget": assort["budget"],
+        "full_capital": assort["full_capital"],
+        "max_change": prices["max_change"],
         "forecast_mase": fc["mase"],
         "next_month_revenue": fc["next_month_revenue"],
+        "next_month_band": [fc["lower"][0], fc["upper"][0]],
         "cards": cards,
     }
 
@@ -106,6 +127,6 @@ def build_plan(ds: Dataset | None = None, budget: float | None = None) -> dict:
 if __name__ == "__main__":  # pragma: no cover
     p = build_plan()
     print(f"Expected annual uplift: EUR {p['expected_uplift_eur']:,.0f} "
-          f"({p['expected_uplift_pct']:.1%} of gross margin)")
+          f"({p['expected_uplift_pct']:.1%} of annual gross margin)")
     for c in p["cards"]:
         print(f"  - [{c['lever']}] {c['title']}: EUR {c['impact_eur']:,.0f}")

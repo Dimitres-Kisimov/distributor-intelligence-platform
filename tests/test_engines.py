@@ -132,6 +132,27 @@ def test_prescribe_build_plan_positive_uplift_and_cards():
     assert abs(sum(plan["levers"].values()) - plan["expected_uplift_eur"]) < 1.0
 
 
+def test_prescribe_uplift_pct_is_an_annual_ratio():
+    """Annual uplift must be quoted against *annual* gross margin (24 mo / 2)."""
+    ds = build_dataset()
+    plan = prescribe.build_plan(ds)
+    k = analytics.kpis(ds)
+    annual_margin = k["gross_margin"] * 12.0 / len(k["months"])
+    assert abs(plan["expected_uplift_pct"] - plan["expected_uplift_eur"] / annual_margin) < 1e-3
+    assert plan["annual_gross_margin"] == round(annual_margin, 2)
+
+
+def test_prescribe_guardrail_flows_into_pricing_lever():
+    ds = build_dataset()
+    tight = prescribe.build_plan(ds, max_change=0.05)
+    default = prescribe.build_plan(ds)
+    assert tight["max_change"] == 0.05
+    assert tight["levers"]["pricing"] <= default["levers"]["pricing"]
+    # band accompanies the next-month point forecast for the board summary
+    lo, hi = default["next_month_band"]
+    assert lo <= default["next_month_revenue"] <= hi
+
+
 def test_exports_build_pdf_nonempty_bytes():
     data = exports.build_pdf()
     assert isinstance(data, bytes)
@@ -144,6 +165,14 @@ def test_exports_build_excel_nonempty_bytes():
     assert isinstance(data, bytes)
     assert len(data) > 10_000
     assert data[:2] == b"PK"  # xlsx is a zip container
+
+
+def test_exports_are_scenario_aware():
+    """A non-default budget/guardrail must change the deliverable's content."""
+    default = exports.build_excel()
+    scenario = exports.build_excel(budget=8000.0, max_change=0.05)
+    assert scenario[:2] == b"PK"
+    assert scenario != default
 
 
 def test_numpy_scalars_not_leaking_into_prescribe_totals():
