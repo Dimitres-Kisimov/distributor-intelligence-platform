@@ -64,11 +64,33 @@ CACHE = {
     "revenue": analytics.revenue_breakdown(DS),
     "prices": optimize.optimize_prices(DS),
     "routes": optimize.optimize_routes(DS),
-    "prescribe": prescribe.build_plan(DS),
 }
+# The plan is composed FROM the cached engine results, never re-solved: the
+# routes endpoint, the prescribe cards and the exports must all quote the same
+# km and the same uplift, so routing and pricing are solved exactly once above.
+CACHE["prescribe"] = prescribe.build_plan(DS, routes=CACHE["routes"], prices=CACHE["prices"])
 
 
 DEFAULT_MAX_CHANGE = 0.15
+
+
+def _plan_for(budget: float | None, max_change: float) -> dict:
+    """The one plan for a scenario — shared by /api/prescribe and both exports.
+
+    The default scenario returns the startup-cached plan object itself; any
+    other scenario re-runs only the parameterised engines (assortment MILP,
+    pricing) on top of the same cached routing solve, so every consumer of a
+    given scenario sees identical numbers.
+    """
+    if budget is None and max_change == DEFAULT_MAX_CHANGE:
+        return CACHE["prescribe"]
+    return prescribe.build_plan(
+        DS,
+        budget=budget,
+        max_change=max_change,
+        routes=CACHE["routes"],
+        prices=CACHE["prices"] if max_change == DEFAULT_MAX_CHANGE else None,
+    )
 
 
 def _float_arg(name: str, default: float | None = None) -> float | None:
@@ -167,25 +189,14 @@ def api_routes():
 def api_prescribe():
     budget = _float_arg("budget")
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
-    if budget is None and max_change == DEFAULT_MAX_CHANGE:
-        return jsonify(CACHE["prescribe"])
-    # Routing is independent of both knobs; pricing is reusable when the
-    # guardrail is the default. Passing the cached results keeps the live
-    # slider/guardrail recompute fast (assortment MILP + pricing only).
-    return jsonify(prescribe.build_plan(
-        DS,
-        budget=budget,
-        max_change=max_change,
-        routes=CACHE["routes"],
-        prices=CACHE["prices"] if max_change == DEFAULT_MAX_CHANGE else None,
-    ))
+    return jsonify(_plan_for(budget, max_change))
 
 
 @app.route("/api/export/pdf")
 def api_export_pdf():
     budget = _float_arg("budget")
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
-    data = exports.build_pdf(budget=budget, max_change=max_change)
+    data = exports.build_pdf(budget=budget, max_change=max_change, plan=_plan_for(budget, max_change))
     return Response(
         data,
         mimetype="application/pdf",
@@ -197,7 +208,7 @@ def api_export_pdf():
 def api_export_excel():
     budget = _float_arg("budget")
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
-    data = exports.build_excel(budget=budget, max_change=max_change)
+    data = exports.build_excel(budget=budget, max_change=max_change, plan=_plan_for(budget, max_change))
     return Response(
         data,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -89,6 +89,32 @@ def test_routes_route(client):
     assert body["optimized_km"] <= body["baseline_km"]
 
 
+def test_routes_prescribe_and_card_quote_same_km(client):
+    """One routing solve is the single source of truth: the routes endpoint,
+    the prescribe routing lever and the action-card text must all agree."""
+    from dip.prescribe import COST_PER_KM, ROUTING_RUNS_PER_YEAR
+
+    routes = client.get("/api/optimize/routes").get_json()
+    plan = client.get("/api/prescribe").get_json()
+    assert abs(plan["levers"]["routing"] - routes["km_saved"] * COST_PER_KM * ROUTING_RUNS_PER_YEAR) < 0.01
+    card = next(c for c in plan["cards"] if c["id"] == "routing")
+    assert f"{routes['km_saved']:,.0f} km per run" in card["detail"]
+
+
+def test_export_excel_matches_onscreen_plan(client):
+    """The workbook Summary must quote the exact plan the dashboard serves."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    plan = client.get("/api/prescribe").get_json()
+    resp = client.get("/api/export/excel")
+    ws = load_workbook(BytesIO(resp.data), read_only=True)["Summary"]
+    rows = {r[0]: r[1] for r in ws.iter_rows(values_only=True) if r and r[0]}
+    assert rows["Expected annual uplift (EUR)"] == plan["expected_uplift_eur"]
+    assert rows["Uplift % of annual gross margin"] == plan["expected_uplift_pct"]
+
+
 def test_export_pdf_route(client):
     resp = client.get("/api/export/pdf")
     assert resp.status_code == 200

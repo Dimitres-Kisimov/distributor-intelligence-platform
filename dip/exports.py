@@ -49,16 +49,19 @@ def _scenario_line(plan: dict) -> str:
     )
 
 
-def build_pdf(budget: float | None = None, max_change: float = 0.15) -> bytes:
+def build_pdf(budget: float | None = None, max_change: float = 0.15, plan: dict | None = None) -> bytes:
     """Render the executive-review PDF for the given scenario and return its bytes.
 
     ``budget`` / ``max_change`` mirror the dashboard controls so the exported
-    deck matches what was on screen when the user clicked Export.
+    deck matches what was on screen when the user clicked Export. Callers that
+    already hold the plan for this exact scenario (the Flask endpoints pass the
+    served one, the CLI builds one and shares it) pass it as ``plan`` so the
+    deliverable quotes *the same object* the dashboard shows — never a re-solve.
     """
     ds = build_dataset()
     k = kpis(ds)
     fc = forecast_revenue(ds)
-    plan = build_plan(ds, budget=budget, max_change=max_change)
+    plan = plan if plan is not None else build_plan(ds, budget=budget, max_change=max_change)
     mb = margin_bridge(ds)
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
@@ -150,15 +153,19 @@ def build_pdf(budget: float | None = None, max_change: float = 0.15) -> bytes:
     return buf.getvalue()
 
 
-def build_excel(budget: float | None = None, max_change: float = 0.15) -> bytes:
-    """Render the multi-sheet workbook for the given scenario and return its bytes."""
+def build_excel(budget: float | None = None, max_change: float = 0.15, plan: dict | None = None) -> bytes:
+    """Render the multi-sheet workbook for the given scenario and return its bytes.
+
+    ``plan``, when supplied, must be the plan built for this exact scenario —
+    it is reused verbatim (see :func:`build_pdf`) instead of being re-solved.
+    """
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
     ds = build_dataset()
     k = kpis(ds)
     fc = forecast_revenue(ds)
-    plan = build_plan(ds, budget=budget, max_change=max_change)
+    plan = plan if plan is not None else build_plan(ds, budget=budget, max_change=max_change)
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
     assort = optimize_assortment(ds, budget=budget)
