@@ -54,11 +54,42 @@ def test_abc_xyz_grid_totals():
     assert az["total_revenue"] > 0
 
 
+def test_abc_xyz_per_sku_backs_the_drill_down():
+    """Each per-SKU row carries the name/category the drill-down table shows,
+    and the per-SKU rows must re-total to the grid cell they belong to."""
+    ds = build_dataset()
+    az = analytics.abc_xyz(ds)
+    names = {s["sku_id"]: (s["name"], s["category"]) for s in ds.skus}
+    for row in az["per_sku"]:
+        assert (row["name"], row["category"]) == names[row["sku_id"]]
+        assert row["cell"] == row["abc"] + row["xyz"]
+    for cell, agg in az["grid"].items():
+        rows = [r for r in az["per_sku"] if r["cell"] == cell]
+        assert len(rows) == agg["count"]
+        assert abs(sum(r["revenue"] for r in rows) - agg["revenue"]) < 1.0
+
+
 def test_rfm_covers_every_customer():
     ds = build_dataset()
     rfm = analytics.rfm_segments(ds)
     assert len(rfm["per_customer"]) == len(ds.customers)
     assert sum(s["count"] for s in rfm["segments"]) == len(ds.customers)
+
+
+def test_rfm_per_customer_backs_the_drill_down():
+    """Drill-down rows expose the raw recency/frequency behind the quintile
+    scores, and per-customer monetary re-totals to the segment bars."""
+    ds = build_dataset()
+    rfm = analytics.rfm_segments(ds)
+    raw = {c["customer_id"]: c for c in ds.customers}
+    for row in rfm["per_customer"]:
+        src = raw[row["customer_id"]]
+        assert row["recency_months"] == src["recency_months"]
+        assert row["frequency"] == src["frequency"] >= 1
+    for seg in rfm["segments"]:
+        rows = [r for r in rfm["per_customer"] if r["segment"] == seg["segment"]]
+        assert len(rows) == seg["count"]
+        assert abs(sum(r["monetary"] for r in rows) - seg["monetary"]) < 1.0
 
 
 def test_margin_bridge_steps():

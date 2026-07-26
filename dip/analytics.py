@@ -100,6 +100,7 @@ def abc_xyz(ds: Dataset | None = None) -> dict:
     ds = ds or build_dataset()
     m = ds.monthly
     skus = [s["sku_id"] for s in ds.skus]
+    meta = {s["sku_id"]: s for s in ds.skus}
 
     rev_by_sku = _group_sum(m["sku_id"], m["revenue"])
     # per-sku monthly units matrix for CV
@@ -136,6 +137,8 @@ def abc_xyz(ds: Dataset | None = None) -> dict:
         per_sku.append(
             {
                 "sku_id": s,
+                "name": meta[s]["name"],
+                "category": meta[s]["category"],
                 "abc": abc_label[s],
                 "xyz": xyz_label[s],
                 "cell": cell,
@@ -194,6 +197,10 @@ def rfm_segments(ds: Dataset | None = None) -> dict:
                 "m": int(m_s[i]),
                 "segment": seg,
                 "monetary": round(c["monetary"], 2),
+                # raw values behind the quintile scores, so the drill-down can
+                # answer "when did they last order / how often" without a lookup
+                "recency_months": int(c["recency_months"]),
+                "frequency": int(c["frequency"]),
             }
         )
     segments = [
