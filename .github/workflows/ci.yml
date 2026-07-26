@@ -28,3 +28,17 @@ jobs:
 
       - name: Test (pytest)
         run: python -m pytest -q
+
+      # Dependency-vulnerability audit. Informational (continue-on-error) on
+      # purpose: requirements.txt uses floor pins (e.g. Flask>=3.0), so a new
+      # CVE in a transitive dependency would fail every build here even when
+      # nothing in this demo repo can act on it. Visibility is still the point
+      # — the portfolio's SECURITY_AND_EFFICIENCY doc lists unaudited
+      # dependencies as a known gap, and this step closes it: findings show up
+      # in the job log for triage instead of silently not existing. Actionable
+      # findings get fixed by bumping the floor pin in requirements.txt.
+      - name: Audit dependencies (pip-audit, informational)
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          python -m pip_audit -r requirements.txt --strict
