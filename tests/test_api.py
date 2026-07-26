@@ -136,6 +136,29 @@ def test_rfm_route_serves_drill_down_fields(client):
         assert key in row
 
 
+def test_api_open_when_token_unset(client, monkeypatch):
+    monkeypatch.delenv("DIP_API_TOKEN", raising=False)
+    assert client.get("/api/health").status_code == 200
+
+
+def test_api_401_when_token_set_and_header_missing_or_wrong(client, monkeypatch):
+    monkeypatch.setenv("DIP_API_TOKEN", "s3cret")
+    resp = client.get("/api/health")
+    assert resp.status_code == 401
+    assert "Bearer" in resp.get_json()["error"]
+    wrong = client.get("/api/health", headers={"Authorization": "Bearer nope"})
+    assert wrong.status_code == 401
+    # HTML routes stay open — the guard covers the API surface only
+    assert client.get("/").status_code == 200
+
+
+def test_api_200_with_correct_bearer_token(client, monkeypatch):
+    monkeypatch.setenv("DIP_API_TOKEN", "s3cret")
+    resp = client.get("/api/health", headers={"Authorization": "Bearer s3cret"})
+    assert resp.status_code == 200
+    assert resp.get_json()["status"] == "ok"
+
+
 def test_dashboard_html_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200

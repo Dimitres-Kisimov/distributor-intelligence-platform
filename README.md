@@ -95,6 +95,19 @@ python -m ruff check .
 python -m pytest -q
 ```
 
+### Optional API token
+
+By default the app runs as an open local demo. Setting `DIP_API_TOKEN` makes
+every `/api/*` route require `Authorization: Bearer <token>` (401 otherwise);
+the HTML pages stay open. This is a deployment stub, not production auth —
+one shared token, no users, no scopes, no rotation. A real deployment needs a
+proper identity provider (OIDC/OAuth2) in front of the app.
+
+```bash
+DIP_API_TOKEN=changeme python app.py
+curl -H "Authorization: Bearer changeme" http://localhost:5000/api/health
+```
+
 ## Architecture
 
 ```

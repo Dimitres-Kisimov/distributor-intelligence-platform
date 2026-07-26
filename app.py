@@ -16,7 +16,9 @@ API  : ``/api/kpis`` ``/api/forecast`` ``/api/margin-bridge`` ``/api/abc-xyz``
 
 from __future__ import annotations
 
+import hmac
 import math
+import os
 
 import numpy as np
 from flask import (
@@ -72,6 +74,27 @@ CACHE["prescribe"] = prescribe.build_plan(DS, routes=CACHE["routes"], prices=CAC
 
 
 DEFAULT_MAX_CHANGE = 0.15
+
+
+# ---- optional API auth (deployment stub) -----------------------------------
+@app.before_request
+def _require_api_token():
+    """Single-token bearer auth for ``/api/*`` — only when DIP_API_TOKEN is set.
+
+    Unset (the default) leaves the app exactly as before: an open local demo.
+    Set, every API route demands ``Authorization: Bearer <token>`` and answers
+    401 otherwise. This is a deployment stub, not production auth — no users,
+    no scopes, no rotation; a real deployment needs a proper identity provider.
+    The env var is read per request so tests (and operators) can toggle it
+    without restarting. Comparison is constant-time via ``hmac.compare_digest``.
+    """
+    token = os.environ.get("DIP_API_TOKEN")
+    if not token or not request.path.startswith("/api/"):
+        return None
+    supplied = request.headers.get("Authorization", "")
+    if hmac.compare_digest(supplied, f"Bearer {token}"):
+        return None
+    return jsonify({"error": "unauthorized: this API requires 'Authorization: Bearer <token>'"}), 401
 
 
 def _plan_for(budget: float | None, max_change: float) -> dict:
