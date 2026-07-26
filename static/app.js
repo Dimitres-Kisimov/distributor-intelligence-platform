@@ -105,11 +105,11 @@ function initNav() {
 }
 
 /* ------------------------------------------------------------------ state */
-const STATE = { kpis: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, breakdownDim: "region", routeMode: "optimized" };
+const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0 };
 
 /* ------------------------------------------------------------------ KPIs */
 function renderKPIs() {
-  const k = STATE.kpis, p = window.__INITIAL__.plan;
+  const k = STATE.kpis, p = STATE.plan;
   $("#kpi-revenue").textContent = eur(k.revenue);
   $("#kpi-margin").textContent = pct(k.gross_margin_pct);
   $("#kpi-margin-sub").textContent = eur(k.gross_margin) + " gross margin";
@@ -117,7 +117,7 @@ function renderKPIs() {
   $("#kpi-yoy-sub").className = "delta " + (k.yoy >= 0 ? "up" : "down");
   $("#kpi-yoy-sub").textContent = "last 12 vs prior 12";
   $("#kpi-uplift").textContent = eur(p.expected_uplift_eur);
-  $("#kpi-uplift-sub").textContent = pct(p.expected_uplift_pct) + " of gross margin";
+  $("#kpi-uplift-sub").textContent = pct(p.expected_uplift_pct) + " of annual gross margin";
   $("#kpi-otif").textContent = pct(k.otif);
 }
 
@@ -358,11 +358,13 @@ function renderRoutes() {
   ctx.beginPath(); ctx.roundRect(dx - 6, dy - 6, 12, 12, 3); ctx.fill();
   ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
 
-  // stats
-  const km = STATE.routeMode === "optimized" ? r.optimized_km : r.baseline_km;
+  // stats — labels follow the selected mode so the three numbers share a frame
+  const optimized = STATE.routeMode === "optimized";
+  const km = optimized ? r.optimized_km : r.baseline_km;
   $("#route-km").textContent = num(km) + " km";
-  $("#route-km-l").textContent = STATE.routeMode === "optimized" ? "km (OR-Tools)" : "km (baseline)";
+  $("#route-km-l").textContent = optimized ? "km (optimised)" : "km (current practice)";
   $("#route-saved").textContent = num(r.km_saved) + " km";
+  $("#route-saved-l").textContent = optimized ? "km saved vs current practice" : "km saved if optimised";
   $("#route-veh").textContent = routes.length;
 
   // hover
@@ -420,14 +422,106 @@ async function onBudget(pctVal) {
   $("#budgetLabel").textContent = eurFull(budget) + " / " + eurFull(full);
   clearTimeout(budgetTimer);
   budgetTimer = setTimeout(async () => {
-    STATE.assort = await getJSON("/api/optimize/assortment?budget=" + Math.round(budget));
-    renderAssort();
+    refreshPlan(); // headline uplift + action cards follow the same scenario
+    try {
+      STATE.assort = await getJSON("/api/optimize/assortment?budget=" + Math.round(budget));
+      renderAssort();
+    } catch (err) {
+      $("#assort-pill").textContent = "load failed — move the slider to retry";
+    }
   }, 130);
+}
+
+/* ---------------------------------------------------- plan (uplift + actions) */
+function setPlanLoading(on) {
+  $("#kpi-uplift").classList.toggle("loading", on);
+  if (on) $("#actions-total").textContent = "recomputing…";
+}
+
+/* Re-run /api/prescribe for the scenario currently selected in the UI, so the
+   headline uplift KPI, action cards, board summary and export links never show
+   a different budget/guardrail than the assortment card. */
+async function refreshPlan() {
+  const full = STATE.assort ? STATE.assort.full_capital : null;
+  const pctVal = +$("#budgetSlider").value;
+  const budget = full ? Math.round((pctVal / 100) * full) : null;
+  const seq = ++STATE.planSeq;
+  setPlanLoading(true);
+  try {
+    let url = "/api/prescribe?max_change=" + STATE.maxChange;
+    if (budget != null) url += "&budget=" + budget;
+    const plan = await getJSON(url);
+    if (seq !== STATE.planSeq) return; // a newer request superseded this one
+    STATE.plan = plan;
+    renderKPIs();
+    renderActions();
+    renderSummary();
+    updateExportLinks();
+  } catch (err) {
+    if (seq === STATE.planSeq) $("#actions-total").textContent = "recompute failed — adjust a control to retry";
+  } finally {
+    if (seq === STATE.planSeq) $("#kpi-uplift").classList.remove("loading");
+  }
+}
+
+/* ------------------------------------------------------------ board summary */
+function renderSummary() {
+  const p = STATE.plan;
+  if (!p) return;
+  const lv = p.levers || {};
+  const top = p.cards && p.cards[0];
+  const budgetTxt = p.budget != null && p.full_capital
+    ? eur(p.budget) + " budget (" + Math.round((p.budget / p.full_capital) * 100) + "% of capital)"
+    : "the current budget";
+  const guardTxt = "±" + Math.round((p.max_change != null ? p.max_change : STATE.maxChange) * 100) + "% price guardrail";
+  const band = p.next_month_band;
+  const parts = [
+    "Plan at " + budgetTxt + ", " + guardTxt + ": expected uplift " + eur(p.expected_uplift_eur) + "/yr" +
+      (lv.pricing != null ? " (pricing " + eur(lv.pricing) + " · routing " + eur(lv.routing) + " · assortment " + eur(lv.assortment) + ")" : "") + ".",
+    p.next_month_revenue != null
+      ? "Next-month forecast " + eur(p.next_month_revenue) + (band ? " (band " + eur(band[0]) + "–" + eur(band[1]) + ")" : "") + "."
+      : "",
+    top ? "Top action: " + top.title + "." : "",
+  ];
+  $("#boardSummaryText").textContent = parts.filter(Boolean).join(" ");
+}
+
+function initSummaryCopy() {
+  const btn = $("#copySummary");
+  btn.addEventListener("click", async () => {
+    const text = $("#boardSummaryText").textContent;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (err) {
+      // clipboard API unavailable (http / permissions): fall back to execCommand
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+      ta.remove();
+    }
+    btn.textContent = ok ? "Copied" : "Copy failed";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1600);
+  });
+}
+
+/* Exports carry the on-screen scenario so the deck matches the dashboard. */
+function updateExportLinks() {
+  const p = STATE.plan;
+  if (!p || p.budget == null) return;
+  const q = "?budget=" + Math.round(p.budget) + "&max_change=" + (p.max_change != null ? p.max_change : STATE.maxChange);
+  $("#exportPdf").href = "/api/export/pdf" + q;
+  $("#exportExcel").href = "/api/export/excel" + q;
 }
 
 /* ------------------------------------------------------------ actions */
 function renderActions() {
-  const p = window.__INITIAL__.plan;
+  const p = STATE.plan;
   $("#actions-total").textContent = "Σ " + eur(p.expected_uplift_eur) + " / yr";
   const colors = { Pricing: PALETTE.blue, Assortment: PALETTE.green, Logistics: PALETTE.amber, Forecast: PALETTE.pink };
   $("#actions").innerHTML = p.cards
@@ -451,13 +545,59 @@ function renderAll() {
   renderHeat(); renderRFM(); renderRoutes(); renderAssort(); renderActions();
 }
 
+/* ------------------------------------------------------------ focused views */
+/* /routes and /assortment deep links land on the relevant card, highlighted. */
+function applyFocusView() {
+  const view = (window.__INITIAL__ && window.__INITIAL__.view) || "overview";
+  const focusMap = { routes: { sec: "sec-routes", title: "Delivery routing" }, assortment: { sec: "sec-assortment", title: "Assortment optimiser" } };
+  const f = focusMap[view];
+  if (!f) return;
+  const el = document.getElementById(f.sec);
+  if (!el) return;
+  document.title = f.title + " — Distributor Intelligence Platform";
+  $$(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.target === f.sec));
+  el.classList.add("focus-card");
+  requestAnimationFrame(() => el.scrollIntoView({ behavior: "auto", block: "start" }));
+}
+
 /* ------------------------------------------------------------ boot */
+async function loadData() {
+  // no budget param: the server answers with its default (40% of full capital),
+  // so the first render can never drift from the server-side definition.
+  const [forecast, margin, abc, rfm, revenue, routes, assort] = await Promise.all([
+    getJSON("/api/forecast"),
+    getJSON("/api/margin-bridge"),
+    getJSON("/api/abc-xyz"),
+    getJSON("/api/rfm"),
+    getJSON("/api/revenue"),
+    getJSON("/api/optimize/routes"),
+    getJSON("/api/optimize/assortment"),
+  ]);
+  STATE.forecast = forecast; STATE.margin = margin; STATE.abc = abc;
+  STATE.rfm = rfm; STATE.revenue = revenue; STATE.routes = routes; STATE.assort = assort;
+  // sync slider to the server-reported budget share
+  $("#budgetSlider").value = Math.round((assort.budget / assort.full_capital) * 100);
+  $("#loadError").hidden = true;
+  renderAll();
+}
+
+function showLoadError(err) {
+  $("#loadErrorMsg").textContent = "Could not load dashboard data (" + (err && err.message ? err.message : "network error") + "). The charts below may be empty.";
+  $("#loadError").hidden = false;
+}
+
 async function boot() {
   initTheme();
   initNav();
+  initSummaryCopy();
   STATE.kpis = window.__INITIAL__.kpis;
+  STATE.plan = window.__INITIAL__.plan;
+  STATE.maxChange = STATE.plan && STATE.plan.max_change != null ? STATE.plan.max_change : 0.15;
   renderKPIs();
   renderActions();
+  renderSummary();
+  updateExportLinks();
+  applyFocusView();
 
   // segment toggles
   $$("#breakdownSeg button").forEach((b) =>
@@ -476,23 +616,25 @@ async function boot() {
       renderRoutes();
     })
   );
+  $$("#guardSeg button").forEach((b) =>
+    b.addEventListener("click", () => {
+      $$("#guardSeg button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      STATE.maxChange = parseFloat(b.dataset.mc);
+      refreshPlan();
+    })
+  );
   $("#budgetSlider").addEventListener("input", (e) => onBudget(+e.target.value));
+  $("#retryLoad").addEventListener("click", async () => {
+    $("#loadError").hidden = true;
+    try { await loadData(); } catch (err) { showLoadError(err); }
+  });
 
-  // load everything in parallel
-  const [forecast, margin, abc, rfm, revenue, routes, assort] = await Promise.all([
-    getJSON("/api/forecast"),
-    getJSON("/api/margin-bridge"),
-    getJSON("/api/abc-xyz"),
-    getJSON("/api/rfm"),
-    getJSON("/api/revenue"),
-    getJSON("/api/optimize/routes"),
-    getJSON("/api/optimize/assortment?budget=" + Math.round(0.4 * 26394)),
-  ]);
-  STATE.forecast = forecast; STATE.margin = margin; STATE.abc = abc;
-  STATE.rfm = rfm; STATE.revenue = revenue; STATE.routes = routes; STATE.assort = assort;
-  // sync slider to actual full capital
-  $("#budgetSlider").value = Math.round((assort.budget / assort.full_capital) * 100);
-  renderAll();
+  try {
+    await loadData();
+  } catch (err) {
+    showLoadError(err);
+  }
 
   window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(renderAll, 150); });
 }

@@ -41,13 +41,25 @@
         <div class="crumb">Distributor Intelligence Platform &middot; unified analytics, forecasting &amp; optimisation</div>
       </div>
       <div class="topbar-actions">
-        <a class="btn" href="/api/export/excel">Export Excel</a>
-        <a class="btn primary" href="/api/export/pdf">Executive PDF</a>
+        <a class="btn" id="exportExcel" href="/api/export/excel" title="Workbook computed for the budget and guardrail currently selected on screen">Export Excel</a>
+        <a class="btn primary" id="exportPdf" href="/api/export/pdf" title="PDF computed for the budget and guardrail currently selected on screen">Executive PDF</a>
         <button class="btn icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">◐</button>
       </div>
     </header>
 
     <div class="content">
+      <!-- Board summary -->
+      <section class="board-summary" id="boardSummary">
+        <div class="bs-text" id="boardSummaryText">—</div>
+        <button class="btn" id="copySummary" type="button" title="Copy this summary to the clipboard">Copy</button>
+      </section>
+
+      <!-- Load error (hidden unless a data fetch fails) -->
+      <div class="load-error" id="loadError" hidden>
+        <span id="loadErrorMsg">Could not load dashboard data.</span>
+        <button class="btn" id="retryLoad" type="button">Retry</button>
+      </div>
+
       <!-- KPI row -->
       <section id="sec-overview" class="kpi-row">
         <div class="kpi">
@@ -65,15 +77,15 @@
           <div class="value" id="kpi-yoy">—</div>
           <div class="delta" id="kpi-yoy-sub">last 12 vs prior 12</div>
         </div>
-        <div class="kpi pink">
-          <div class="label">Expected uplift</div>
+        <div class="kpi pink" title="Sum of the three modelled levers (pricing, routing, assortment) for the budget and guardrail selected below. Recomputes live when you move either control.">
+          <div class="label">Expected uplift <span class="info">?</span></div>
           <div class="value" id="kpi-uplift">—</div>
           <div class="delta up" id="kpi-uplift-sub">from the plan</div>
         </div>
-        <div class="kpi">
-          <div class="label">OTIF service</div>
+        <div class="kpi" title="Modelled estimate derived from average SKU lead times in the synthetic dataset — not a measured operational service level.">
+          <div class="label">OTIF service <span class="info">?</span></div>
           <div class="value" id="kpi-otif">—</div>
-          <div class="delta" id="kpi-otif-sub">on-time in-full</div>
+          <div class="delta" id="kpi-otif-sub">modelled from lead times</div>
         </div>
       </section>
 
@@ -82,7 +94,7 @@
         <div class="card col-8" id="sec-forecast">
           <div class="card-head">
             <div class="card-title">Revenue &amp; demand forecast</div>
-            <span class="pill blue" id="forecast-pill">MASE —</span>
+            <span class="pill blue has-info" id="forecast-pill" title="MASE = mean absolute scaled error from a rolling-origin backtest on this data. Below 1.0 beats a seasonal-naive forecast; 0.38 means roughly 62% less error than naive.">MASE —</span>
           </div>
           <canvas id="forecastChart" height="300"></canvas>
           <div class="legend">
@@ -109,7 +121,7 @@
         <div class="card col-7" id="sec-margin">
           <div class="card-head">
             <div class="card-title">Gross-margin bridge (H1 → H2)</div>
-            <span class="card-note">price / volume / mix decomposition</span>
+            <span class="card-note has-info" title="Classic price / volume / mix walk between the two halves of the horizon. The Price step is €0 by construction: list prices are static in this synthetic dataset, so the change is driven by volume and mix.">volume / mix / price walk &middot; Price is €0 here (static list prices) <span class="info">?</span></span>
           </div>
           <canvas id="marginChart" height="280"></canvas>
         </div>
@@ -129,19 +141,19 @@
         <!-- Assortment optimiser -->
         <div class="card col-7" id="sec-assortment">
           <div class="card-head">
-            <div class="card-title">Assortment optimiser (MILP vs greedy)</div>
+            <div class="card-title">Assortment optimiser (MILP vs greedy) <span class="info" title="MILP = mixed-integer optimiser: the provably best SKU selection under the budget. Greedy = a sensible rule-of-thumb baseline (best margin-per-capital first). The uplift shown is the optimiser's edge over that already-sensible heuristic, not the total value of assortment planning.">?</span></div>
             <span class="pill" id="assort-pill">—</span>
           </div>
           <div class="slider-wrap">
             <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);font-weight:600">
-              <span>Working-capital budget</span>
+              <span title="Capital tied up in inventory for the SKUs carried. Moving this re-runs the assortment optimiser and recomputes the whole plan (headline uplift + actions).">Working-capital budget</span>
               <span id="budgetLabel">—</span>
             </div>
             <input type="range" id="budgetSlider" min="15" max="100" value="40" step="1" />
             <div class="stat-pair">
               <div class="s"><span class="n" id="assort-count">—</span><span class="l">SKUs carried</span></div>
               <div class="s"><span class="n" id="assort-margin">—</span><span class="l">margin captured (MILP)</span></div>
-              <div class="s"><span class="n" style="color:var(--green)" id="assort-uplift">—</span><span class="l">vs greedy baseline</span></div>
+              <div class="s" title="The optimiser's edge over the greedy rule-of-thumb at this budget — honest lift over an already-sensible baseline."><span class="n" style="color:var(--green)" id="assort-uplift">—</span><span class="l">vs greedy baseline</span></div>
             </div>
           </div>
           <canvas id="assortChart" height="150" style="margin-top:14px"></canvas>
@@ -152,15 +164,15 @@
           <div class="card-head">
             <div class="card-title">Delivery routing</div>
             <div class="seg" id="routeSeg">
-              <button class="active" data-mode="optimized">OR-Tools</button>
-              <button data-mode="baseline">Nearest-nb</button>
+              <button class="active" data-mode="optimized" title="OR-Tools CVRP solver — the recommended plan">Optimised</button>
+              <button data-mode="baseline" title="Nearest-neighbour heuristic — how routes are typically built by hand today">Current practice</button>
             </div>
           </div>
           <canvas id="routeChart" height="260"></canvas>
           <div class="stat-pair">
             <div class="s"><span class="n" id="route-km">—</span><span class="l" id="route-km-l">km this run</span></div>
-            <div class="s"><span class="n" style="color:var(--green)" id="route-saved">—</span><span class="l">km saved vs baseline</span></div>
-            <div class="s"><span class="n" id="route-veh">—</span><span class="l">vehicles</span></div>
+            <div class="s"><span class="n" style="color:var(--green)" id="route-saved">—</span><span class="l" id="route-saved-l">km saved if optimised</span></div>
+            <div class="s" title="The solver minimises kilometres, not vehicle count — the optimised plan may use more vans to drive fewer km."><span class="n" id="route-veh">—</span><span class="l">vehicles <span class="info">?</span></span></div>
           </div>
         </div>
 
@@ -177,7 +189,14 @@
         <div class="card col-7" id="sec-actions">
           <div class="card-head">
             <div class="card-title">Recommended actions</div>
-            <span class="pill green" id="actions-total">—</span>
+            <div class="head-controls">
+              <div class="seg" id="guardSeg" title="Price guardrail: the maximum price move allowed per SKU. Re-runs the pricing engine and recomputes the plan.">
+                <button data-mc="0.05">±5%</button>
+                <button data-mc="0.1">±10%</button>
+                <button class="active" data-mc="0.15">±15%</button>
+              </div>
+              <span class="pill green" id="actions-total">—</span>
+            </div>
           </div>
           <div class="actions" id="actions"></div>
         </div>
