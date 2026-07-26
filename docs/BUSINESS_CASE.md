@@ -82,4 +82,7 @@ assortment, pricing, RFM, and actions sheets). Both are produced by
 All data is synthetic and deterministic. The numbers are as-measured on the
 seed and illustrate the method; they are not a benchmark on real data and make
 no state-of-the-art claim. OTIF is a modelled proxy, and the routing figure
-annualises a single representative run.
+annualises a single representative run. The routing solver terminates on a
+fixed solution budget (not a wall clock), and the dashboard, the action cards
+and both exports are generated from one shared plan per scenario — so every
+figure in this document is stable across runs and identical in every artefact.

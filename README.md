@@ -59,7 +59,11 @@ are ones greedy already solves nearly optimally, and I'd rather show that than
 pretend the gap is huge. The MASE below 1.0 means the model beats a
 seasonal-naive benchmark on this seeded series; it is not a claim about real
 demand. The routing saving is a single day's run annualised over an assumed 250
-runs at EUR 1.15/km.
+runs at EUR 1.15/km. The CVRP search terminates on a fixed solution budget
+rather than a wall-clock limit, so the 140 km figure — and every number built
+on it, including the EUR 136,972 headline — is identical on every solve; an
+earlier build used a 3-second time limit, which let the same process quote two
+different km depending on machine load.
 
 ## Running it
 
@@ -102,7 +106,11 @@ templates/, static/  the executive command-center dashboard (hand-built charts)
 
 The Flask layer runs every expensive computation once at boot and caches it, so
 the dashboard stays snappy; only the parameterised optimisers (assortment
-budget, price guardrail) compute per request.
+budget, price guardrail) compute per request. Routing and pricing are solved
+exactly once at startup, the prescription plan is composed *from* those cached
+results, and the PDF/Excel endpoints and the `--deliverables` CLI reuse the
+same plan object — the routes view, the action cards and the exports cannot
+quote different numbers for the same scenario.
 
 ## Screenshots
 
