@@ -105,7 +105,7 @@ function initNav() {
 }
 
 /* ------------------------------------------------------------------ state */
-const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0 };
+const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
 
 /* ------------------------------------------------------------------ KPIs */
 function renderKPIs() {
@@ -288,7 +288,7 @@ function renderHeat() {
       // blue→green scale by revenue intensity
       const alpha = 0.18 + t * 0.82;
       const bg = `color-mix(in srgb, ${PALETTE.blue} ${Math.round(alpha * 100)}%, ${PALETTE.green} ${Math.round((1 - alpha) * 40)}%)`;
-      html += `<div class="cell" style="background:${bg}" data-tip="${a + x}: ${cell.count} SKUs · ${eurFull(cell.revenue)}">
+      html += `<div class="cell" role="button" tabindex="0" data-cell="${a + x}" style="background:${bg}" data-tip="${a + x}: ${cell.count} SKUs · ${eurFull(cell.revenue)} — click for the SKU list">
         <span class="c-name">${a + x}</span>
         <span class="c-count">${cell.count}</span>
         <span class="c-rev">${eur(cell.revenue)}</span>
@@ -299,7 +299,78 @@ function renderHeat() {
   $$("#heat .cell").forEach((c) => {
     c.addEventListener("mousemove", (e) => showTip(e.clientX, e.clientY, c.dataset.tip));
     c.addEventListener("mouseleave", hideTip);
+    c.addEventListener("click", () => toggleSkuDrill(c.dataset.cell));
+    c.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSkuDrill(c.dataset.cell); } });
   });
+  renderSkuDrill(); // re-apply an open drill-down after a data reload/redraw
+}
+
+/* ---------------------------------------------- drill-downs (names, not tiles)
+   The API already ships per-SKU and per-customer rows with abc-xyz / rfm;
+   clicking a heatmap cell or a segment bar renders them, so "CZ is dead
+   weight" becomes an actual SKU list and "call the at-risk accounts" becomes
+   actual customer names. */
+function toggleSkuDrill(cell) {
+  STATE.drillCell = STATE.drillCell === cell ? null : cell;
+  renderSkuDrill();
+}
+
+function renderSkuDrill() {
+  const box = $("#skuDrill");
+  const cell = STATE.drillCell;
+  $$("#heat .cell").forEach((c) => c.classList.toggle("sel", c.dataset.cell === cell));
+  if (!cell || !STATE.abc) { box.hidden = true; return; }
+  const rows = STATE.abc.per_sku.filter((s) => s.cell === cell).sort((a, b) => b.revenue - a.revenue);
+  const revSum = rows.reduce((t, s) => t + s.revenue, 0);
+  $("#skuDrillTitle").textContent = `${cell} — ${rows.length} SKU${rows.length === 1 ? "" : "s"} · ${eur(revSum)} revenue (24 mo)`;
+  $("#skuDrillTable").innerHTML =
+    `<tr><th>SKU</th><th>Name</th><th>Category</th><th class="num">Revenue</th><th class="num" title="Coefficient of variation of monthly units — higher = less stable demand">CV</th></tr>` +
+    rows
+      .map(
+        (s) => `<tr>
+          <td>${s.sku_id}</td>
+          <td>${s.name}</td>
+          <td>${s.category}</td>
+          <td class="num">${eurFull(s.revenue)}</td>
+          <td class="num">${s.cv.toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+  box.hidden = false;
+}
+
+function toggleCustDrill(segment) {
+  STATE.drillSegment = STATE.drillSegment === segment ? null : segment;
+  renderCustDrill();
+}
+
+function renderCustDrill() {
+  const box = $("#custDrill");
+  const seg = STATE.drillSegment;
+  $$("#rfmBars .bar-row").forEach((r) => r.classList.toggle("sel", r.dataset.segment === seg));
+  if (!seg || !STATE.rfm) { box.hidden = true; return; }
+  const rows = STATE.rfm.per_customer.filter((c) => c.segment === seg).sort((a, b) => b.monetary - a.monetary);
+  const monSum = rows.reduce((t, c) => t + c.monetary, 0);
+  $("#custDrillTitle").textContent = `${seg} — ${rows.length} customer${rows.length === 1 ? "" : "s"} · ${eur(monSum)}`;
+  $("#custDrillTable").innerHTML =
+    `<tr><th>Customer</th><th title="Recency · Frequency · Monetary quintile scores (5 = best)">R·F·M</th><th>Last order</th><th class="num">Orders</th><th class="num">Value</th></tr>` +
+    rows
+      .map(
+        (c) => `<tr>
+          <td>${c.name} <span class="dim">${c.customer_id}</span></td>
+          <td>${c.r}·${c.f}·${c.m}</td>
+          <td>${c.recency_months === 0 ? "this month" : c.recency_months + " mo ago"}</td>
+          <td class="num">${c.frequency}</td>
+          <td class="num">${eurFull(c.monetary)}</td>
+        </tr>`
+      )
+      .join("");
+  box.hidden = false;
+}
+
+function initDrills() {
+  $("#skuDrillClose").addEventListener("click", () => { STATE.drillCell = null; renderSkuDrill(); });
+  $("#custDrillClose").addEventListener("click", () => { STATE.drillSegment = null; renderCustDrill(); });
 }
 
 /* ------------------------------------------------------------ RFM segments */
@@ -311,13 +382,18 @@ function renderRFM() {
   const cmap = { Champions: PALETTE.green, Loyal: PALETTE.blue, "New / Promising": PALETTE.amber, "At Risk (high value)": PALETTE.pink, "Needs Attention": "#7b61ff", Hibernating: "#5a6b8c" };
   $("#rfmBars").innerHTML = segs
     .map(
-      (s) => `<div class="bar-row">
-        <span title="${s.segment}">${s.segment}</span>
+      (s) => `<div class="bar-row clickable" role="button" tabindex="0" data-segment="${s.segment}" title="${s.segment} — click for the customer list">
+        <span>${s.segment}</span>
         <div class="bar-track"><div class="bar-fill" style="width:${(s.monetary / max) * 100}%;background:${cmap[s.segment] || PALETTE.blue}"></div></div>
         <span class="bar-val">${s.count} · ${eur(s.monetary)}</span>
       </div>`
     )
     .join("");
+  $$("#rfmBars .bar-row").forEach((r) => {
+    r.addEventListener("click", () => toggleCustDrill(r.dataset.segment));
+    r.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleCustDrill(r.dataset.segment); } });
+  });
+  renderCustDrill(); // re-apply an open drill-down after a data reload/redraw
 }
 
 /* ------------------------------------------------------------ route map */
@@ -456,6 +532,7 @@ async function refreshPlan() {
     renderKPIs();
     renderActions();
     renderSummary();
+    renderCompare();
     updateExportLinks();
   } catch (err) {
     if (seq === STATE.planSeq) $("#actions-total").textContent = "recompute failed — adjust a control to retry";
@@ -507,6 +584,64 @@ function initSummaryCopy() {
     }
     btn.textContent = ok ? "Copied" : "Copy failed";
     setTimeout(() => { btn.textContent = "Copy"; }, 1600);
+  });
+}
+
+/* ------------------------------------------------------ scenario compare */
+/* Pin the plan currently on screen, then move the budget slider or guardrail:
+   both scenarios stay visible side by side with a modelled delta. Routing is
+   solved once at startup and is identical in both, so the delta is driven by
+   pricing and assortment only — and is labelled that way. */
+function planSnapshot(p) {
+  return {
+    budget: p.budget,
+    full_capital: p.full_capital,
+    max_change: p.max_change,
+    expected_uplift_eur: p.expected_uplift_eur,
+    levers: { pricing: p.levers.pricing, assortment: p.levers.assortment, routing: p.levers.routing },
+  };
+}
+
+function scenarioDesc(p) {
+  const share = p.full_capital ? Math.round((p.budget / p.full_capital) * 100) : null;
+  return eur(p.budget) + " budget" + (share != null ? " (" + share + "%)" : "") + " · ±" + Math.round(p.max_change * 100) + "% prices";
+}
+
+function leverDesc(lv) {
+  return "pricing " + eur(lv.pricing) + " · routing " + eur(lv.routing) + " · assortment " + eur(lv.assortment);
+}
+
+function renderCompare() {
+  const bar = $("#compareBar");
+  const pin = STATE.pinned, cur = STATE.plan;
+  if (!pin || !cur) { bar.hidden = true; return; }
+  $("#cmpPinnedScenario").textContent = scenarioDesc(pin);
+  $("#cmpPinnedUplift").textContent = eur(pin.expected_uplift_eur) + " / yr";
+  $("#cmpPinnedLevers").textContent = leverDesc(pin.levers);
+  $("#cmpCurrentScenario").textContent = scenarioDesc(cur);
+  $("#cmpCurrentUplift").textContent = eur(cur.expected_uplift_eur) + " / yr";
+  $("#cmpCurrentLevers").textContent = leverDesc(cur.levers);
+  const d = cur.expected_uplift_eur - pin.expected_uplift_eur;
+  const dEl = $("#cmpDelta");
+  dEl.textContent = (d >= 0 ? "+" : "−") + eur(Math.abs(d)) + " / yr";
+  dEl.classList.toggle("up", d >= 0);
+  dEl.classList.toggle("down", d < 0);
+  const dp = cur.levers.pricing - pin.levers.pricing;
+  const da = cur.levers.assortment - pin.levers.assortment;
+  const sgn = (v) => (v >= 0 ? "+" : "−") + eur(Math.abs(v));
+  $("#cmpDeltaLevers").textContent = "pricing " + sgn(dp) + " · assortment " + sgn(da);
+  bar.hidden = false;
+}
+
+function initCompare() {
+  $("#pinScenario").addEventListener("click", () => {
+    if (!STATE.plan) return;
+    STATE.pinned = planSnapshot(STATE.plan);
+    renderCompare();
+  });
+  $("#unpinScenario").addEventListener("click", () => {
+    STATE.pinned = null;
+    renderCompare();
   });
 }
 
@@ -590,6 +725,8 @@ async function boot() {
   initTheme();
   initNav();
   initSummaryCopy();
+  initCompare();
+  initDrills();
   STATE.kpis = window.__INITIAL__.kpis;
   STATE.plan = window.__INITIAL__.plan;
   STATE.maxChange = STATE.plan && STATE.plan.max_change != null ? STATE.plan.max_change : 0.15;

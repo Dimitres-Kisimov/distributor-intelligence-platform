@@ -51,7 +51,31 @@
       <!-- Board summary -->
       <section class="board-summary" id="boardSummary">
         <div class="bs-text" id="boardSummaryText">—</div>
+        <button class="btn" id="pinScenario" type="button" title="Pin the plan currently on screen, then change the budget or guardrail to compare scenarios side by side">Pin scenario</button>
         <button class="btn" id="copySummary" type="button" title="Copy this summary to the clipboard">Copy</button>
+      </section>
+
+      <!-- Scenario compare (hidden until a plan is pinned) -->
+      <section class="compare" id="compareBar" hidden>
+        <div class="cmp-col">
+          <div class="cmp-tag">Pinned</div>
+          <div class="cmp-scenario" id="cmpPinnedScenario">—</div>
+          <div class="cmp-uplift" id="cmpPinnedUplift">—</div>
+          <div class="cmp-levers" id="cmpPinnedLevers">—</div>
+        </div>
+        <div class="cmp-col">
+          <div class="cmp-tag">Current</div>
+          <div class="cmp-scenario" id="cmpCurrentScenario">—</div>
+          <div class="cmp-uplift" id="cmpCurrentUplift">—</div>
+          <div class="cmp-levers" id="cmpCurrentLevers">—</div>
+        </div>
+        <div class="cmp-col cmp-delta">
+          <div class="cmp-tag">&Delta; uplift (modelled)</div>
+          <div class="cmp-uplift" id="cmpDelta">—</div>
+          <div class="cmp-levers" id="cmpDeltaLevers">—</div>
+          <div class="cmp-note" title="Both scenarios reuse the same startup routing solve; only pricing and assortment are re-optimised per scenario.">routing identical in both scenarios <span class="info">?</span></div>
+        </div>
+        <button class="btn" id="unpinScenario" type="button" title="Remove the pinned scenario">Unpin</button>
       </section>
 
       <!-- Load error (hidden unless a data fetch fails) -->
@@ -134,7 +158,16 @@
           </div>
           <div class="heat" id="heat"></div>
           <div class="legend">
-            <span class="lg">A/B/C = revenue tier &middot; X/Y/Z = demand stability</span>
+            <span class="lg">A/B/C = revenue tier &middot; X/Y/Z = demand stability &middot; click a cell for its SKUs</span>
+          </div>
+          <div class="drill" id="skuDrill" hidden>
+            <div class="drill-head">
+              <span class="drill-title" id="skuDrillTitle">—</span>
+              <button class="btn drill-close" id="skuDrillClose" type="button">Close</button>
+            </div>
+            <div class="drill-scroll">
+              <table class="drill-table" id="skuDrillTable"></table>
+            </div>
           </div>
         </div>
 
@@ -180,9 +213,18 @@
         <div class="card col-5" id="sec-segments">
           <div class="card-head">
             <div class="card-title">Customer segments (RFM)</div>
-            <span class="card-note">by monetary value</span>
+            <span class="card-note">by monetary value &middot; click a segment for its customers</span>
           </div>
           <div class="bars" id="rfmBars"></div>
+          <div class="drill" id="custDrill" hidden>
+            <div class="drill-head">
+              <span class="drill-title" id="custDrillTitle">—</span>
+              <button class="btn drill-close" id="custDrillClose" type="button">Close</button>
+            </div>
+            <div class="drill-scroll">
+              <table class="drill-table" id="custDrillTable"></table>
+            </div>
+          </div>
         </div>
 
         <!-- Recommended actions -->

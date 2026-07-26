@@ -122,7 +122,24 @@ def test_export_pdf_route(client):
     assert resp.data[:4] == b"%PDF"
 
 
+def test_abc_xyz_route_serves_drill_down_fields(client):
+    body = client.get("/api/abc-xyz").get_json()
+    row = body["per_sku"][0]
+    for key in ("sku_id", "name", "category", "cell", "revenue", "cv"):
+        assert key in row
+
+
+def test_rfm_route_serves_drill_down_fields(client):
+    body = client.get("/api/rfm").get_json()
+    row = body["per_customer"][0]
+    for key in ("customer_id", "name", "segment", "monetary", "recency_months", "frequency"):
+        assert key in row
+
+
 def test_dashboard_html_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"<html" in resp.data.lower()
+    # drill-down panels and the scenario-compare controls ship with the page
+    for marker in (b"skuDrill", b"custDrill", b"pinScenario", b"compareBar"):
+        assert marker in resp.data
