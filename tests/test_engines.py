@@ -117,6 +117,14 @@ def test_optimize_routes_saves_distance():
     assert r["n_vehicles_used"] >= 1
 
 
+def test_optimize_routes_deterministic_across_solves():
+    """Termination is a fixed solution budget, not a wall clock: two consecutive
+    in-process solves must return byte-identical routes and km (the regression
+    that once made the dashboard, prescribe cards and exports disagree)."""
+    ds = build_dataset()
+    assert optimize.optimize_routes(ds) == optimize.optimize_routes(ds)
+
+
 def test_prescribe_build_plan_positive_uplift_and_cards():
     plan = prescribe.build_plan(build_dataset())
     assert plan["expected_uplift_eur"] > 0

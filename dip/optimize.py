@@ -162,6 +162,15 @@ def optimize_prices(ds: Dataset | None = None, max_change: float = 0.15) -> dict
 # (c) Routing — capacitated vehicle routing (CVRP) via OR-Tools.
 # ----------------------------------------------------------------------------
 
+# Deterministic termination for the guided-local-search phase: stop after a
+# fixed number of search solutions instead of a wall-clock time limit. A time
+# limit makes the answer depend on machine speed and load — two solves in the
+# same process can return different km, so the dashboard, the prescribe layer
+# and the exports drift apart. A solution budget makes every solve identical.
+# 600 sits past the GLS improvement plateau on this instance (a 2000-solution
+# search finds no better tour) and solves in roughly two seconds.
+GLS_SOLUTION_LIMIT = 600
+
 
 def _distance_matrix(points: list[tuple[float, float]]) -> np.ndarray:
     pts = np.array(points)
@@ -202,8 +211,17 @@ def _nn_cvrp(dist: np.ndarray, demands: list[int], capacity: float) -> tuple[flo
     return float(total), routes
 
 
-def optimize_routes(ds: Dataset | None = None, n_vehicles: int = 6, capacity_kg: float = 2200.0) -> dict:
-    """CVRP with OR-Tools vs a nearest-neighbour baseline for the day's run."""
+def optimize_routes(
+    ds: Dataset | None = None,
+    n_vehicles: int = 6,
+    capacity_kg: float = 2200.0,
+    solution_limit: int = GLS_SOLUTION_LIMIT,
+) -> dict:
+    """CVRP with OR-Tools vs a nearest-neighbour baseline for the day's run.
+
+    The search terminates on ``solution_limit`` (a fixed solution budget, not a
+    wall clock), so repeated solves return byte-identical routes and km.
+    """
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
     ds = ds or build_dataset()
@@ -235,7 +253,7 @@ def optimize_routes(ds: Dataset | None = None, n_vehicles: int = 6, capacity_kg:
     params = pywrapcp.DefaultRoutingSearchParameters()
     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
     params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    params.time_limit.FromSeconds(3)
+    params.solution_limit = solution_limit  # deterministic: no wall-clock cutoff
 
     solution = routing.SolveWithParameters(params)
     routes = []
