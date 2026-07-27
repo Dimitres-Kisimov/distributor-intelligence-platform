@@ -84,6 +84,7 @@ def optimize_assortment(ds: Dataset | None = None, budget: float | None = None) 
 
     uplift = milp_margin - greedy_margin
     carried = [eco["ids"][i] for i in range(n) if x[i] == 1]
+    greedy_carried = [eco["ids"][i] for i in range(n) if g[i] == 1]
     return {
         "budget": round(budget, 2),
         "full_capital": round(full_capital, 2),
@@ -100,6 +101,9 @@ def optimize_assortment(ds: Dataset | None = None, budget: float | None = None) 
         "uplift_vs_greedy": round(uplift, 2),
         "uplift_pct": round(uplift / greedy_margin, 4) if greedy_margin else 0.0,
         "carried_skus": carried,
+        # the greedy baseline's picks too, so the plan explanation can show the
+        # SKU-level diff (adds/drops) whose contributions sum to the uplift
+        "greedy_carried_skus": greedy_carried,
         "status": res.message if hasattr(res, "message") else "optimal",
     }
 

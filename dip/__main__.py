@@ -28,9 +28,15 @@ def _write_deliverables(out_dir: Path) -> list[tuple[Path, int]]:
     """
     from dip import exports
     from dip.data import build_dataset
+    from dip.explain import explain_plan
+    from dip.optimize import optimize_prices, optimize_routes
     from dip.prescribe import build_plan
 
-    plan = build_plan(build_dataset())
+    ds = build_dataset()
+    routes = optimize_routes(ds)
+    prices = optimize_prices(ds)
+    plan = build_plan(ds, routes=routes, prices=prices)
+    explanation = explain_plan(ds, plan=plan, routes=routes, prices=prices)
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[tuple[Path, int]] = []
     jobs = [
@@ -38,7 +44,7 @@ def _write_deliverables(out_dir: Path) -> list[tuple[Path, int]]:
         ("executive_workbook.xlsx", exports.build_excel),
     ]
     for name, builder in jobs:
-        data = builder(plan=plan)
+        data = builder(plan=plan, ds=ds, explanation=explanation)
         path = out_dir / name
         path.write_bytes(data)
         size = path.stat().st_size

@@ -4,7 +4,12 @@
 - :func:`build_excel` -> multi-sheet workbook (openpyxl)
 
 Both take an in-memory buffer so the Flask endpoints can stream them and the
-CLI script can write them to ``deliverables/``.
+CLI script can write them to ``deliverables/``. Both accept the dataset to
+report on (``ds``): the Flask endpoints pass the *currently served* dataset, so
+after an Excel import the deliverables reflect the imported data — the same
+numbers as the screen. Both also carry the plan explanation (a "Why this plan?"
+PDF page / an Explanation workbook sheet), rendered from the single structure
+:func:`dip.explain.explain_plan` builds.
 """
 
 from __future__ import annotations
@@ -24,9 +29,10 @@ from .analytics import (
     revenue_breakdown,
     rfm_segments,
 )
-from .data import build_dataset
+from .data import Dataset, build_dataset
+from .explain import explain_plan
 from .forecast import forecast_revenue
-from .optimize import optimize_assortment, optimize_prices
+from .optimize import optimize_assortment, optimize_prices, optimize_routes
 from .prescribe import build_plan
 
 INK = "#1a2233"
@@ -49,7 +55,52 @@ def _scenario_line(plan: dict) -> str:
     )
 
 
-def build_pdf(budget: float | None = None, max_change: float = 0.15, plan: dict | None = None) -> bytes:
+def _source_line(source: dict | None) -> str:
+    """The deliverable's data-source disclosure (honest in both modes)."""
+    if source is None or source.get("synthetic", True):
+        return "Synthetic data - generated deterministically. Author: Dimitres Kisimov, 2026."
+    return (
+        f"Your data: {source.get('filename')} ({source.get('n_skus')} SKUs, imported; "
+        "customers & routing remain synthetic). Author: Dimitres Kisimov, 2026."
+    )
+
+
+def _plan_and_explanation(
+    ds: Dataset,
+    budget: float | None,
+    max_change: float,
+    plan: dict | None,
+    explanation: dict | None,
+    source: dict | None,
+) -> tuple[dict, dict]:
+    """Resolve the (plan, explanation) pair for a deliverable.
+
+    Callers that hold both (the Flask endpoints, the CLI) pass them through
+    untouched. Otherwise one routing + pricing solve is shared by the plan and
+    its explanation; every engine is deterministic, so a recompute can never
+    disagree with a passed-in plan.
+    """
+    if plan is not None and explanation is not None:
+        return plan, explanation
+    routes = optimize_routes(ds)
+    prices = optimize_prices(ds, max_change=max_change)
+    if plan is None:
+        plan = build_plan(ds, budget=budget, max_change=max_change, routes=routes, prices=prices)
+    if explanation is None:
+        explanation = explain_plan(
+            ds, max_change=max_change, plan=plan, routes=routes, prices=prices, source=source
+        )
+    return plan, explanation
+
+
+def build_pdf(
+    budget: float | None = None,
+    max_change: float = 0.15,
+    plan: dict | None = None,
+    ds: Dataset | None = None,
+    source: dict | None = None,
+    explanation: dict | None = None,
+) -> bytes:
     """Render the executive-review PDF for the given scenario and return its bytes.
 
     ``budget`` / ``max_change`` mirror the dashboard controls so the exported
@@ -57,11 +108,14 @@ def build_pdf(budget: float | None = None, max_change: float = 0.15, plan: dict 
     already hold the plan for this exact scenario (the Flask endpoints pass the
     served one, the CLI builds one and shares it) pass it as ``plan`` so the
     deliverable quotes *the same object* the dashboard shows — never a re-solve.
+    ``ds`` is the dataset to report on (the Flask endpoints pass the currently
+    served one, so imported data flows into the deck); ``explanation`` the
+    matching :func:`dip.explain.explain_plan` structure for the "Why" page.
     """
-    ds = build_dataset()
+    ds = ds if ds is not None else build_dataset()
     k = kpis(ds)
     fc = forecast_revenue(ds)
-    plan = plan if plan is not None else build_plan(ds, budget=budget, max_change=max_change)
+    plan, explanation = _plan_and_explanation(ds, budget, max_change, plan, explanation, source)
     mb = margin_bridge(ds)
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
@@ -91,8 +145,7 @@ def build_pdf(budget: float | None = None, max_change: float = 0.15, plan: dict 
             y = 0.60 - (i // 3) * 0.22
             fig.text(x, y, val, fontsize=20, weight="bold", color=BLUE)
             fig.text(x, y - 0.05, lab, fontsize=11, color=GREY)
-        fig.text(0.06, 0.06, "Synthetic data - generated deterministically. Author: Dimitres Kisimov, 2026.",
-                 fontsize=8, color=GREY)
+        fig.text(0.06, 0.06, _source_line(source), fontsize=8, color=GREY)
         pdf.savefig(fig)
         plt.close(fig)
 
@@ -150,22 +203,85 @@ def build_pdf(budget: float | None = None, max_change: float = 0.15, plan: dict 
         pdf.savefig(fig)
         plt.close(fig)
 
+        # ---- Page 5: why this plan? (rendered from dip.explain's structure) --
+        ex = explanation
+        fig = plt.figure(figsize=(11.69, 8.27))
+        fig.text(0.06, 0.93, "Why this plan?", fontsize=20, weight="bold", color=INK)
+        fig.text(
+            0.06, 0.885,
+            f"Expected uplift {_eur(ex['headline']['expected_uplift_eur'])}/yr "
+            f"({ex['headline']['expected_uplift_pct']:.1%}) vs {ex['headline']['baseline']}.",
+            fontsize=11, color=INK,
+        )
+        y = 0.835
+        fig.text(0.06, y, "Binding constraints", fontsize=12.5, weight="bold", color=BLUE)
+        y -= 0.033
+        for bc in ex["binding_constraints"]:
+            tag = "BINDING" if bc["binding"] else "slack"
+            fig.text(0.06, y, f"[{tag}] {bc['detail']}", fontsize=9, color=INK)
+            y -= 0.028
+        y -= 0.012
+        fig.text(0.06, y, "What changes vs doing nothing", fontsize=12.5, weight="bold", color=BLUE)
+        y -= 0.033
+        for lv in ex["levers"]:
+            fig.text(0.06, y, f"{lv['lever'].title()} — {_eur(lv['total_eur'])}/yr",
+                     fontsize=10.5, weight="bold", color=INK)
+            y -= 0.026
+            for mv in lv["moves"]:
+                who = f"{mv['sku_id']}: " if mv["sku_id"] else ""
+                fig.text(0.08, y, f"- {who}{mv['action']}  ({_eur(mv['contribution_eur'])})",
+                         fontsize=8.5, color=INK)
+                y -= 0.023
+            fig.text(0.08, y, lv["note"], fontsize=8, color=GREY)
+            y -= 0.029
+        sens = ex["sensitivity"]
+        fig.text(0.06, y, "Sensitivity (budget -10% / +10%)", fontsize=12.5, weight="bold", color=BLUE)
+        y -= 0.030
+        fig.text(
+            0.06, y,
+            f"At {_eur(sens['budget_minus_10pct']['budget'])}: uplift "
+            f"{_eur(sens['budget_minus_10pct']['expected_uplift_eur'])} "
+            f"({sens['budget_minus_10pct']['delta_eur']:+,.0f}); at "
+            f"{_eur(sens['budget_plus_10pct']['budget'])}: "
+            f"{_eur(sens['budget_plus_10pct']['expected_uplift_eur'])} "
+            f"({sens['budget_plus_10pct']['delta_eur']:+,.0f}). {sens['note']}.",
+            fontsize=9, color=INK,
+        )
+        y -= 0.036
+        fig.text(0.06, y, "Caveats", fontsize=12.5, weight="bold", color=BLUE)
+        y -= 0.030
+        for cv in ex["caveats"]:
+            fig.text(0.06, y, f"- {cv}", fontsize=8, color=GREY)
+            y -= 0.023
+        pdf.savefig(fig)
+        plt.close(fig)
+
     return buf.getvalue()
 
 
-def build_excel(budget: float | None = None, max_change: float = 0.15, plan: dict | None = None) -> bytes:
+def build_excel(
+    budget: float | None = None,
+    max_change: float = 0.15,
+    plan: dict | None = None,
+    ds: Dataset | None = None,
+    source: dict | None = None,
+    explanation: dict | None = None,
+) -> bytes:
     """Render the multi-sheet workbook for the given scenario and return its bytes.
 
     ``plan``, when supplied, must be the plan built for this exact scenario —
     it is reused verbatim (see :func:`build_pdf`) instead of being re-solved.
+    ``ds`` / ``source`` / ``explanation`` mirror :func:`build_pdf`: the workbook
+    reports on the currently served dataset (imported or synthetic) and carries
+    an Explanation sheet rendered from the same structure as ``/api/explain``.
     """
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
-    ds = build_dataset()
+    ds = ds if ds is not None else build_dataset()
     k = kpis(ds)
     fc = forecast_revenue(ds)
-    plan = plan if plan is not None else build_plan(ds, budget=budget, max_change=max_change)
+    plan, explanation = _plan_and_explanation(ds, budget, max_change, plan, explanation, source)
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
     assort = optimize_assortment(ds, budget=budget)
@@ -200,6 +316,12 @@ def build_excel(budget: float | None = None, max_change: float = 0.15, plan: dic
         ("Scenario: price guardrail (+/-)", plan["max_change"]),
         ("Expected annual uplift (EUR)", plan["expected_uplift_eur"]),
         ("Uplift % of annual gross margin", plan["expected_uplift_pct"]),
+        (
+            "Data source",
+            "seeded synthetic dataset"
+            if source is None or source.get("synthetic", True)
+            else f"imported: {source.get('filename')} ({source.get('n_skus')} SKUs)",
+        ),
     ]
     _header(ws, 3, ["Metric", "Value"])
     for i, (m, v) in enumerate(rows, start=4):
@@ -268,6 +390,58 @@ def build_excel(budget: float | None = None, max_change: float = 0.15, plan: dic
         ws.cell(row=r, column=1, value=c["lever"]); ws.cell(row=r, column=2, value=c["title"])
         ws.cell(row=r, column=3, value=c["impact_eur"]); ws.cell(row=r, column=4, value=c["confidence"])
     ws.column_dimensions["B"].width = 44
+
+    # Explanation — the same structure /api/explain and the PDF "Why" page use
+    ex = explanation
+    ws = wb.create_sheet("Explanation")
+    ws["A1"] = "Why this plan?"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = (
+        f"Expected uplift EUR {ex['headline']['expected_uplift_eur']:,.0f}/yr "
+        f"({ex['headline']['expected_uplift_pct']:.1%}) vs {ex['headline']['baseline']}"
+    )
+    r = 4
+    _header(ws, r, ["Constraint", "Binding?", "Detail"])
+    for bc in ex["binding_constraints"]:
+        r += 1
+        ws.cell(row=r, column=1, value=bc["name"])
+        ws.cell(row=r, column=2, value="BINDING" if bc["binding"] else "slack")
+        ws.cell(row=r, column=3, value=bc["detail"])
+    r += 2
+    _header(ws, r, ["Lever", "Move", "Contribution (EUR)"])
+    for lv in ex["levers"]:
+        r += 1
+        ws.cell(row=r, column=1, value=lv["lever"])
+        ws.cell(row=r, column=2, value=f"lever total ({lv['n_moves']} moves)")
+        ws.cell(row=r, column=3, value=lv["total_eur"])
+        for mv in lv["moves"]:
+            r += 1
+            ws.cell(row=r, column=2, value=(f"{mv['sku_id']}: " if mv["sku_id"] else "") + mv["action"])
+            ws.cell(row=r, column=3, value=mv["contribution_eur"])
+        if lv["remainder_eur"]:
+            r += 1
+            ws.cell(row=r, column=2, value="all remaining moves together")
+            ws.cell(row=r, column=3, value=lv["remainder_eur"])
+    r += 2
+    _header(ws, r, ["Sensitivity", "Budget (EUR)", "Uplift (EUR)", "Delta (EUR)"])
+    for key, label in (("budget_minus_10pct", "budget -10%"), ("budget_plus_10pct", "budget +10%")):
+        r += 1
+        s = ex["sensitivity"][key]
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=s["budget"])
+        ws.cell(row=r, column=3, value=s["expected_uplift_eur"])
+        ws.cell(row=r, column=4, value=s["delta_eur"])
+    r += 1
+    ws.cell(row=r, column=1, value=ex["sensitivity"]["note"])
+    r += 2
+    _header(ws, r, ["Caveats"])
+    for cv in ex["caveats"]:
+        r += 1
+        ws.cell(row=r, column=1, value=cv)
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 72
+    ws.column_dimensions["C"].width = 18
+    ws.column_dimensions["D"].width = 14
 
     buf = io.BytesIO()
     wb.save(buf)
