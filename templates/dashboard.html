@@ -27,9 +27,10 @@
     <a class="nav-item" data-target="sec-routes"><span class="dot"></span> Delivery routes</a>
     <a class="nav-item" data-target="sec-segments"><span class="dot"></span> Customer segments</a>
     <a class="nav-item" data-target="sec-actions"><span class="dot"></span> Recommended actions</a>
+    <a class="nav-item" data-target="sec-why"><span class="dot"></span> Why this plan?</a>
     <div class="nav-spacer"></div>
     <div class="nav-foot">
-      Synthetic data, generated deterministically.<br />
+      {% if source and not source.synthetic %}Your data: {{ source.filename }} ({{ source.n_skus }} SKUs).{% else %}Synthetic data, generated deterministically.{% endif %}<br />
       &copy; 2026 Dimitres Kisimov &middot; MIT
     </div>
   </aside>
@@ -41,6 +42,9 @@
         <div class="crumb">Distributor Intelligence Platform &middot; unified analytics, forecasting &amp; optimisation</div>
       </div>
       <div class="topbar-actions">
+        <a class="btn" id="importTemplate" href="/api/import/template" title="Download the empty Excel import template (SKUs sheet + instructions)">Template</a>
+        <button class="btn" id="importBtn" type="button" title="Upload a filled template: the whole platform (KPIs, forecast, plan, exports) switches to your data">Import Excel</button>
+        <input type="file" id="importFile" accept=".xlsx" hidden />
         <a class="btn" id="exportExcel" href="/api/export/excel" title="Workbook computed for the budget and guardrail currently selected on screen">Export Excel</a>
         <a class="btn primary" id="exportPdf" href="/api/export/pdf" title="PDF computed for the budget and guardrail currently selected on screen">Executive PDF</a>
         <button class="btn icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">◐</button>
@@ -48,6 +52,25 @@
     </header>
 
     <div class="content">
+      {% if source and not source.synthetic %}
+      <!-- Data-source banner: the whole platform is running on the imported workbook -->
+      <section class="data-banner" id="dataBanner">
+        <span class="db-dot"></span>
+        <span>Your data: <b>{{ source.filename }}</b> ({{ source.n_skus }} SKUs) &mdash;
+          every number on this page, the plan and both exports are computed from it.
+          Customers &amp; delivery routing remain the synthetic demo layer.</span>
+        <button class="btn" id="resetData" type="button" title="Discard the imported workbook (memory only - nothing was saved) and restore the synthetic demo dataset">Back to demo data</button>
+      </section>
+      {% endif %}
+
+      <!-- Import feedback (hidden unless an upload fails) -->
+      <div class="load-error" id="importError" hidden>
+        <div>
+          <div id="importErrorMsg">Import failed.</div>
+          <ul class="import-error-list" id="importErrorList"></ul>
+        </div>
+        <button class="btn" id="importErrorClose" type="button">Dismiss</button>
+      </div>
       <!-- Board summary -->
       <section class="board-summary" id="boardSummary">
         <div class="bs-text" id="boardSummaryText">—</div>
@@ -242,6 +265,18 @@
           </div>
           <div class="actions" id="actions"></div>
         </div>
+
+        <!-- Why this plan? — plain-language explanation from /api/explain -->
+        <div class="card col-12" id="sec-why">
+          <div class="card-head">
+            <div class="card-title">Why this plan? <span class="info" title="Which constraints bind, what changes vs doing nothing (top SKU-level moves), how the number reacts to a ±10% budget, and what not to over-trust. The same structure is exported to the PDF's Why page and the workbook's Explanation sheet.">?</span></div>
+            <button class="btn" id="whyToggle" type="button" aria-expanded="false" aria-controls="whyBody">Show</button>
+          </div>
+          <div class="why-body" id="whyBody" hidden>
+            <div class="why-loading" id="whyLoading">Building the explanation&hellip;</div>
+            <div id="whyContent"></div>
+          </div>
+        </div>
       </div>
     </div>
   </main>
@@ -252,7 +287,8 @@
   window.__INITIAL__ = {
     kpis: {{ kpis | tojson }},
     plan: {{ plan | tojson }},
-    view: {{ view | tojson }}
+    view: {{ view | tojson }},
+    source: {{ source | tojson }}
   };
 </script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

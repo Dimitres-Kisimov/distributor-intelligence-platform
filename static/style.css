@@ -322,3 +322,44 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
   .compare .cmp-col + .cmp-col { border-left: none; border-top: 1px solid var(--line); padding-left: 0; padding-top: 10px; }
   .compare .btn { margin-left: 0; align-self: stretch; }
 }
+
+/* ---------- data-source banner (imported workbook) ---------- */
+.data-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: color-mix(in srgb, var(--green) 10%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--green) 40%, var(--line));
+  border-radius: var(--radius); padding: 12px 16px;
+  font-size: 13px; margin-bottom: 20px;
+}
+.data-banner .db-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--green); flex: none;
+}
+.data-banner .btn { margin-left: auto; flex: none; }
+.import-error-list { margin: 6px 0 0 18px; font-weight: 400; font-size: 12.5px; }
+.import-error-list li { margin: 2px 0; }
+#importError { margin-bottom: 20px; }
+
+/* ---------- why-this-plan panel ---------- */
+.why-body { padding-top: 4px; }
+.why-loading { color: var(--muted); font-size: 13px; padding: 8px 0; }
+.why-headline { font-size: 14px; font-weight: 600; margin-bottom: 14px; line-height: 1.5; }
+.why-sec-title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--blue); margin: 16px 0 8px;
+}
+.why-constraint { display: flex; gap: 10px; align-items: baseline; margin: 6px 0; font-size: 13px; line-height: 1.5; }
+.why-badge {
+  flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
+  padding: 2px 8px; border-radius: 999px;
+}
+.why-badge.binding { background: color-mix(in srgb, var(--pink) 16%, transparent); color: var(--pink); }
+.why-badge.slack { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+.why-lever { margin: 10px 0 14px; }
+.why-lever-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.why-lever-head .amt { color: var(--green); font-variant-numeric: tabular-nums; }
+.why-move { display: flex; justify-content: space-between; gap: 14px; font-size: 12.5px; padding: 3px 0 3px 14px; line-height: 1.45; }
+.why-move .amt { color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+.why-lever-note { font-size: 11.5px; color: var(--muted); padding-left: 14px; margin-top: 2px; }
+.why-sens { font-size: 13px; line-height: 1.55; }
+.why-caveats { margin: 4px 0 0 18px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.why-caveats li { margin: 4px 0; }

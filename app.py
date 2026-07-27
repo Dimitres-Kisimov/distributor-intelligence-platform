@@ -1,9 +1,17 @@
 """Distributor Intelligence Platform — Flask application.
 
-One API in front of every engine. Expensive computations are run once at
-startup and cached, so the dashboard and its live controls stay snappy. The
+One API in front of every engine. Expensive computations are run once per
+dataset and cached, so the dashboard and its live controls stay snappy. The
 only per-request compute is the parameterised optimisers (assortment budget,
 price guardrail), which are fast.
+
+The app starts on the seeded synthetic dataset. ``POST /api/import`` swaps the
+whole platform onto the user's own Excel workbook (template from
+``GET /api/import/template``): KPIs, forecast, assortment, pricing, the plan
+and both exports all run on the imported data through the same single-plan
+path. ``POST /api/reset`` restores the synthetic dataset — the exact startup
+objects, so behaviour is byte-identical to a fresh boot. Imported data lives
+in process memory only; nothing is written to disk.
 
 Routes
 ------
@@ -11,6 +19,7 @@ HTML : ``/`` dashboard, ``/routes`` and ``/assortment`` focused sub-views
 API  : ``/api/kpis`` ``/api/forecast`` ``/api/margin-bridge`` ``/api/abc-xyz``
        ``/api/rfm`` ``/api/revenue`` ``/api/optimize/assortment``
        ``/api/optimize/prices`` ``/api/optimize/routes`` ``/api/prescribe``
+       ``/api/explain`` ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
 
@@ -19,6 +28,7 @@ from __future__ import annotations
 import hmac
 import math
 import os
+import threading
 
 import numpy as np
 from flask import (
@@ -32,7 +42,7 @@ from flask import (
 )
 from flask.json.provider import DefaultJSONProvider
 
-from dip import analytics, exports, forecast, optimize, prescribe
+from dip import analytics, explain, exports, forecast, importer, optimize, prescribe
 from dip.data import build_dataset
 
 
@@ -55,23 +65,47 @@ class _NumpyJSONProvider(DefaultJSONProvider):
 app = Flask(__name__)
 app.json = _NumpyJSONProvider(app)
 
-# ---- startup cache ---------------------------------------------------------
-DS = build_dataset()
-CACHE = {
-    "kpis": analytics.kpis(DS),
-    "forecast": forecast.forecast_revenue(DS),
-    "margin_bridge": analytics.margin_bridge(DS),
-    "abc_xyz": analytics.abc_xyz(DS),
-    "rfm": analytics.rfm_segments(DS),
-    "revenue": analytics.revenue_breakdown(DS),
-    "prices": optimize.optimize_prices(DS),
-    "routes": optimize.optimize_routes(DS),
-}
-# The plan is composed FROM the cached engine results, never re-solved: the
-# routes endpoint, the prescribe cards and the exports must all quote the same
-# km and the same uplift, so routing and pricing are solved exactly once above.
-CACHE["prescribe"] = prescribe.build_plan(DS, routes=CACHE["routes"], prices=CACHE["prices"])
 
+# ---- dataset state ---------------------------------------------------------
+def _build_cache(ds, routes: dict | None = None) -> dict:
+    """Run every engine once for ``ds``; ``routes`` may reuse an earlier solve."""
+    cache = {
+        "kpis": analytics.kpis(ds),
+        "forecast": forecast.forecast_revenue(ds),
+        "margin_bridge": analytics.margin_bridge(ds),
+        "abc_xyz": analytics.abc_xyz(ds),
+        "rfm": analytics.rfm_segments(ds),
+        "revenue": analytics.revenue_breakdown(ds),
+        "prices": optimize.optimize_prices(ds),
+        "routes": routes if routes is not None else optimize.optimize_routes(ds),
+    }
+    # The plan is composed FROM the cached engine results, never re-solved: the
+    # routes endpoint, the prescribe cards and the exports must all quote the
+    # same km and the same uplift, so routing and pricing are solved exactly
+    # once per dataset above.
+    cache["prescribe"] = prescribe.build_plan(ds, routes=cache["routes"], prices=cache["prices"])
+    return cache
+
+
+def _make_state(ds, source: dict, routes: dict | None = None) -> dict:
+    """Bundle a dataset with its engine cache + source label, swapped atomically."""
+    return {"ds": ds, "cache": _build_cache(ds, routes=routes), "source": source}
+
+
+_SYNTHETIC_STATE = _make_state(
+    build_dataset(),
+    {
+        "synthetic": True,
+        "label": "seeded synthetic dataset",
+        "filename": None,
+        "n_skus": len(build_dataset().skus),
+        "assumptions": [],
+    },
+)
+# Imports replace STATE wholesale; /api/reset points it back at the startup
+# objects themselves, so reset behaviour is byte-identical to a fresh boot.
+STATE = _SYNTHETIC_STATE
+_LOCK = threading.Lock()
 
 DEFAULT_MAX_CHANGE = 0.15
 
@@ -97,22 +131,50 @@ def _require_api_token():
     return jsonify({"error": "unauthorized: this API requires 'Authorization: Bearer <token>'"}), 401
 
 
-def _plan_for(budget: float | None, max_change: float) -> dict:
+def _plan_for(budget: float | None, max_change: float, st: dict | None = None) -> dict:
     """The one plan for a scenario — shared by /api/prescribe and both exports.
 
-    The default scenario returns the startup-cached plan object itself; any
+    The default scenario returns the state-cached plan object itself; any
     other scenario re-runs only the parameterised engines (assortment MILP,
     pricing) on top of the same cached routing solve, so every consumer of a
-    given scenario sees identical numbers.
+    given scenario sees identical numbers. ``st`` pins a state snapshot so a
+    request that builds several artefacts (plan + explanation + export) can
+    never straddle a concurrent import/reset.
     """
+    st = st or STATE
+    cache = st["cache"]
     if budget is None and max_change == DEFAULT_MAX_CHANGE:
-        return CACHE["prescribe"]
+        return cache["prescribe"]
     return prescribe.build_plan(
-        DS,
+        st["ds"],
         budget=budget,
         max_change=max_change,
-        routes=CACHE["routes"],
-        prices=CACHE["prices"] if max_change == DEFAULT_MAX_CHANGE else None,
+        routes=cache["routes"],
+        prices=cache["prices"] if max_change == DEFAULT_MAX_CHANGE else None,
+    )
+
+
+def _explain_for(budget: float | None, max_change: float, st: dict | None = None) -> dict:
+    """The one explanation for a scenario — /api/explain and both exports.
+
+    Reuses the state's routing solve and (for the default guardrail) pricing
+    solve, plus the exact plan `_plan_for` serves, so the story and the numbers
+    can never diverge from what is on screen.
+    """
+    st = st or STATE
+    cache = st["cache"]
+    prices = (
+        cache["prices"]
+        if max_change == DEFAULT_MAX_CHANGE
+        else optimize.optimize_prices(st["ds"], max_change=max_change)
+    )
+    return explain.explain_plan(
+        st["ds"],
+        max_change=max_change,
+        plan=_plan_for(budget, max_change, st=st),
+        routes=cache["routes"],
+        prices=prices,
+        source=st["source"],
     )
 
 
@@ -138,74 +200,95 @@ def _float_arg(name: str, default: float | None = None) -> float | None:
 
 
 # ---- HTML ------------------------------------------------------------------
+def _render_dashboard(view: str) -> str:
+    st = STATE
+    return render_template(
+        "dashboard.html",
+        view=view,
+        kpis=st["cache"]["kpis"],
+        plan=st["cache"]["prescribe"],
+        source=st["source"],
+    )
+
+
 @app.route("/")
 def dashboard() -> str:
-    return render_template("dashboard.html", view="overview", kpis=CACHE["kpis"], plan=CACHE["prescribe"])
+    return _render_dashboard("overview")
 
 
 @app.route("/routes")
 def routes_view() -> str:
-    return render_template("dashboard.html", view="routes", kpis=CACHE["kpis"], plan=CACHE["prescribe"])
+    return _render_dashboard("routes")
 
 
 @app.route("/assortment")
 def assortment_view() -> str:
-    return render_template("dashboard.html", view="assortment", kpis=CACHE["kpis"], plan=CACHE["prescribe"])
+    return _render_dashboard("assortment")
 
 
 # ---- JSON API --------------------------------------------------------------
 @app.route("/api/health")
 def api_health():
-    return jsonify({"status": "ok", "skus": len(DS.skus), "months": DS.n_months})
+    st = STATE
+    return jsonify(
+        {
+            "status": "ok",
+            "skus": len(st["ds"].skus),
+            "months": st["ds"].n_months,
+            "source": st["source"],
+        }
+    )
 
 
 @app.route("/api/kpis")
 def api_kpis():
-    return jsonify(CACHE["kpis"])
+    return jsonify(STATE["cache"]["kpis"])
 
 
 @app.route("/api/forecast")
 def api_forecast():
-    return jsonify(CACHE["forecast"])
+    return jsonify(STATE["cache"]["forecast"])
 
 
 @app.route("/api/margin-bridge")
 def api_margin_bridge():
-    return jsonify(CACHE["margin_bridge"])
+    return jsonify(STATE["cache"]["margin_bridge"])
 
 
 @app.route("/api/abc-xyz")
 def api_abc_xyz():
-    return jsonify(CACHE["abc_xyz"])
+    return jsonify(STATE["cache"]["abc_xyz"])
 
 
 @app.route("/api/rfm")
 def api_rfm():
-    return jsonify(CACHE["rfm"])
+    return jsonify(STATE["cache"]["rfm"])
 
 
 @app.route("/api/revenue")
 def api_revenue():
-    return jsonify(CACHE["revenue"])
+    return jsonify(STATE["cache"]["revenue"])
 
 
 @app.route("/api/optimize/assortment")
 def api_assortment():
+    st = STATE
     budget = _float_arg("budget")
-    return jsonify(optimize.optimize_assortment(DS, budget=budget))
+    return jsonify(optimize.optimize_assortment(st["ds"], budget=budget))
 
 
 @app.route("/api/optimize/prices")
 def api_prices():
+    st = STATE
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
     if max_change == DEFAULT_MAX_CHANGE:
-        return jsonify(CACHE["prices"])
-    return jsonify(optimize.optimize_prices(DS, max_change=max_change))
+        return jsonify(st["cache"]["prices"])
+    return jsonify(optimize.optimize_prices(st["ds"], max_change=max_change))
 
 
 @app.route("/api/optimize/routes")
 def api_routes():
-    return jsonify(CACHE["routes"])
+    return jsonify(STATE["cache"]["routes"])
 
 
 @app.route("/api/prescribe")
@@ -215,11 +298,85 @@ def api_prescribe():
     return jsonify(_plan_for(budget, max_change))
 
 
-@app.route("/api/export/pdf")
-def api_export_pdf():
+@app.route("/api/explain")
+def api_explain():
     budget = _float_arg("budget")
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
-    data = exports.build_pdf(budget=budget, max_change=max_change, plan=_plan_for(budget, max_change))
+    return jsonify(_explain_for(budget, max_change))
+
+
+# ---- Excel round-trip: import your data / reset ----------------------------
+@app.route("/api/import/template")
+def api_import_template():
+    """Serve the empty import template (SKUs sheet + Instructions sheet)."""
+    return Response(
+        importer.build_template(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=dip_import_template.xlsx"},
+    )
+
+
+@app.route("/api/import", methods=["POST"])
+def api_import():
+    """Swap the whole platform onto an uploaded workbook (field ``workbook``).
+
+    Validation failures return 400 with row/cell-addressed ``errors`` and leave
+    the running state untouched. On success every engine re-runs on the
+    imported data through the same single-plan path; the synthetic routing
+    solve is reused because the customer/routing layer is not part of the
+    import (disclosed in ``source.assumptions``). In-memory only — nothing is
+    written to disk, and a restart (or /api/reset) restores the synthetic data.
+    """
+    global STATE
+    upload = request.files.get("workbook")
+    if upload is None or not upload.filename:
+        return jsonify(
+            {
+                "error": "attach an .xlsx workbook (multipart field 'workbook'); "
+                "start from GET /api/import/template"
+            }
+        ), 400
+    data = upload.read(importer.MAX_XLSX_BYTES + 1)
+    try:
+        rows = importer.parse_workbook(data, filename=upload.filename)
+        ds, assumptions = importer.dataset_from_rows(rows)
+    except importer.XlsxImportError as exc:
+        return jsonify({"error": str(exc), "errors": exc.errors}), 400
+    source = {
+        "synthetic": False,
+        "label": f"imported workbook ({upload.filename})",
+        "filename": upload.filename,
+        "n_skus": len(ds.skus),
+        "assumptions": assumptions,
+    }
+    with _LOCK:
+        STATE = _make_state(ds, source, routes=_SYNTHETIC_STATE["cache"]["routes"])
+    return jsonify({"ok": True, "synthetic": False, "n_skus": len(ds.skus), "source": source})
+
+
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    """Restore the seeded synthetic dataset (the exact startup objects)."""
+    global STATE
+    with _LOCK:
+        STATE = _SYNTHETIC_STATE
+    return jsonify({"ok": True, "synthetic": True, "source": STATE["source"]})
+
+
+# ---- exports ---------------------------------------------------------------
+@app.route("/api/export/pdf")
+def api_export_pdf():
+    st = STATE
+    budget = _float_arg("budget")
+    max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
+    data = exports.build_pdf(
+        budget=budget,
+        max_change=max_change,
+        plan=_plan_for(budget, max_change, st=st),
+        ds=st["ds"],
+        source=st["source"],
+        explanation=_explain_for(budget, max_change, st=st),
+    )
     return Response(
         data,
         mimetype="application/pdf",
@@ -229,9 +386,17 @@ def api_export_pdf():
 
 @app.route("/api/export/excel")
 def api_export_excel():
+    st = STATE
     budget = _float_arg("budget")
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
-    data = exports.build_excel(budget=budget, max_change=max_change, plan=_plan_for(budget, max_change))
+    data = exports.build_excel(
+        budget=budget,
+        max_change=max_change,
+        plan=_plan_for(budget, max_change, st=st),
+        ds=st["ds"],
+        source=st["source"],
+        explanation=_explain_for(budget, max_change, st=st),
+    )
     return Response(
         data,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

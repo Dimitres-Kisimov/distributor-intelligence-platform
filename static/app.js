@@ -20,6 +20,9 @@ function eur(n) {
 function eurFull(n) { return "€" + Math.round(n).toLocaleString("en-US"); }
 function pct(n, d = 1) { return (n * 100).toFixed(d) + "%"; }
 function num(n) { return Math.round(n).toLocaleString("en-US"); }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
 
 async function getJSON(url) {
   const r = await fetch(url);
@@ -534,6 +537,7 @@ async function refreshPlan() {
     renderSummary();
     renderCompare();
     updateExportLinks();
+    refreshWhy(); // the explanation follows the same scenario as the plan
   } catch (err) {
     if (seq === STATE.planSeq) $("#actions-total").textContent = "recompute failed — adjust a control to retry";
   } finally {
@@ -645,6 +649,142 @@ function initCompare() {
   });
 }
 
+/* ------------------------------------------------ import your data (Excel) */
+/* POST the filled template; on success the server has swapped every engine
+   onto the imported data, so a full reload is the honest refresh (banner,
+   KPIs, charts and export links all re-render from the new state). */
+function showImportError(msg, errors) {
+  $("#importErrorMsg").textContent = msg;
+  $("#importErrorList").innerHTML = (errors || [])
+    .slice(0, 12)
+    .map((e) => `<li>${esc(e)}</li>`)
+    .join("") + ((errors || []).length > 12 ? `<li>… and ${errors.length - 12} more</li>` : "");
+  $("#importError").hidden = false;
+}
+
+function initImport() {
+  const btn = $("#importBtn"), input = $("#importFile");
+  if (btn && input) {
+    btn.addEventListener("click", () => input.click());
+    input.addEventListener("change", async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      btn.disabled = true;
+      btn.textContent = "Importing…";
+      const form = new FormData();
+      form.append("workbook", file);
+      try {
+        const r = await fetch("/api/import", { method: "POST", body: form });
+        const body = await r.json();
+        if (!r.ok) {
+          showImportError(body.error || "Import failed.", body.errors);
+          return;
+        }
+        location.reload();
+      } catch (err) {
+        showImportError("Import failed: " + (err && err.message ? err.message : "network error"), []);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Import Excel";
+        input.value = ""; // allow re-selecting the same file after a fix
+      }
+    });
+  }
+  const dismiss = $("#importErrorClose");
+  if (dismiss) dismiss.addEventListener("click", () => { $("#importError").hidden = true; });
+  const reset = $("#resetData");
+  if (reset) {
+    reset.addEventListener("click", async () => {
+      reset.disabled = true;
+      try {
+        await fetch("/api/reset", { method: "POST" });
+        location.reload();
+      } catch (err) {
+        reset.disabled = false;
+      }
+    });
+  }
+}
+
+/* ------------------------------------------------ why this plan? panel */
+/* Renders the /api/explain structure — the same one the PDF's Why page and
+   the workbook's Explanation sheet are generated from. Fetched lazily on
+   first open, re-fetched when the scenario (budget/guardrail) changes. */
+const WHY = { open: false, stale: true, seq: 0 };
+
+function whyScenarioQuery() {
+  const p = STATE.plan;
+  let q = "?max_change=" + (p && p.max_change != null ? p.max_change : STATE.maxChange);
+  if (p && p.budget != null) q += "&budget=" + Math.round(p.budget);
+  return q;
+}
+
+function renderWhy(ex) {
+  const h = ex.headline;
+  const sens = ex.sensitivity;
+  const lo = sens.budget_minus_10pct, hi = sens.budget_plus_10pct;
+  const sgn = (v) => (v >= 0 ? "+" : "−") + eur(Math.abs(v));
+  let html = `<div class="why-headline">Expected uplift ${eur(h.expected_uplift_eur)}/yr
+    (${pct(h.expected_uplift_pct)} of annual gross margin) versus the do-nothing baseline —
+    ${esc(h.baseline)}.</div>`;
+
+  html += `<div class="why-sec-title">Which constraints bind</div>`;
+  ex.binding_constraints.forEach((bc) => {
+    html += `<div class="why-constraint">
+      <span class="why-badge ${bc.binding ? "binding" : "slack"}">${bc.binding ? "binding" : "slack"}</span>
+      <span>${esc(bc.detail)}</span></div>`;
+  });
+
+  html += `<div class="why-sec-title">What changes vs doing nothing</div>`;
+  ex.levers.forEach((lv) => {
+    html += `<div class="why-lever"><div class="why-lever-head">
+      <span>${esc(lv.lever[0].toUpperCase() + lv.lever.slice(1))}</span>
+      <span class="amt">${eur(lv.total_eur)}/yr</span></div>`;
+    lv.moves.forEach((mv) => {
+      html += `<div class="why-move"><span>${mv.sku_id ? "<b>" + esc(mv.sku_id) + "</b> — " : ""}${esc(mv.action)}</span>
+        <span class="amt">${sgn(mv.contribution_eur)}</span></div>`;
+    });
+    html += `<div class="why-lever-note">${esc(lv.note)}</div></div>`;
+  });
+
+  html += `<div class="why-sec-title">How sensitive is the number</div>
+    <div class="why-sens">At a 10% tighter budget (${eur(lo.budget)}) the uplift is
+    ${eur(lo.expected_uplift_eur)} (${sgn(lo.delta_eur)}); at a 10% looser budget
+    (${eur(hi.budget)}) it is ${eur(hi.expected_uplift_eur)} (${sgn(hi.delta_eur)}).
+    ${esc(sens.note)}.</div>`;
+
+  html += `<div class="why-sec-title">Caveats</div><ul class="why-caveats">` +
+    ex.caveats.map((c) => `<li>${esc(c)}</li>`).join("") + `</ul>`;
+  $("#whyContent").innerHTML = html;
+}
+
+async function refreshWhy() {
+  if (!WHY.open) { WHY.stale = true; return; }
+  const seq = ++WHY.seq;
+  $("#whyLoading").hidden = false;
+  try {
+    const ex = await getJSON("/api/explain" + whyScenarioQuery());
+    if (seq !== WHY.seq) return;
+    WHY.stale = false;
+    renderWhy(ex);
+  } catch (err) {
+    if (seq === WHY.seq) $("#whyContent").innerHTML = `<div class="why-loading">Could not load the explanation (${esc(err && err.message ? err.message : "network error")}).</div>`;
+  } finally {
+    if (seq === WHY.seq) $("#whyLoading").hidden = true;
+  }
+}
+
+function initWhy() {
+  const toggle = $("#whyToggle");
+  toggle.addEventListener("click", () => {
+    WHY.open = !WHY.open;
+    $("#whyBody").hidden = !WHY.open;
+    toggle.textContent = WHY.open ? "Hide" : "Show";
+    toggle.setAttribute("aria-expanded", String(WHY.open));
+    if (WHY.open && WHY.stale) refreshWhy();
+  });
+}
+
 /* Exports carry the on-screen scenario so the deck matches the dashboard. */
 function updateExportLinks() {
   const p = STATE.plan;
@@ -727,6 +867,8 @@ async function boot() {
   initSummaryCopy();
   initCompare();
   initDrills();
+  initImport();
+  initWhy();
   STATE.kpis = window.__INITIAL__.kpis;
   STATE.plan = window.__INITIAL__.plan;
   STATE.maxChange = STATE.plan && STATE.plan.max_change != null ? STATE.plan.max_change : 0.15;
