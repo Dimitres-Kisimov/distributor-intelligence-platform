@@ -82,6 +82,71 @@ on it, including the EUR 136,972 headline — is identical on every solve; an
 earlier build used a 3-second time limit, which let the same process quote two
 different km depending on machine load.
 
+## Use your own data (Excel round-trip)
+
+The demo doesn't have to stay a demo. The dashboard's **Template** button (or
+`GET /api/import/template`) serves an empty workbook with an `Instructions`
+sheet and a `SKUs` sheet — one row per product in wide format:
+
+```
+sku | name | category | unit_cost | unit_price | 2024-07 | 2024-08 | ... | 2026-06
+```
+
+The 24 month columns hold units sold per month (blank = 0). Fill it in, hit
+**Import Excel** (or `POST /api/import`, multipart field `workbook`), and the
+*whole* platform — KPIs, forecast, ABC-XYZ, margin bridge, assortment MILP,
+pricing, the prescription plan and both exports — re-runs on your data through
+the exact same single-plan path the synthetic mode uses. A banner shows
+"Your data: *file.xlsx* (N SKUs)" with a reset button; the Excel you then
+export quotes your numbers, closing the loop (there's a test that traces
+imported values through the KPIs into the exported Summary sheet).
+
+Validation is strict and cell-addressed (`SKUs!D5: unit_cost must be a
+number...`): missing sheet or renamed/extra columns, non-numeric or negative
+values, zero prices, duplicate SKUs, files over 2 MB or 2,000 rows are all
+rejected with the offending cells listed — and a failed import leaves the
+running state untouched.
+
+Honesty notes, because an import is only as good as its assumptions (they are
+disclosed in the import response, the explanation caveats, and the template
+itself):
+
+- **Customers and delivery routing stay synthetic.** The template covers
+  products only, so the RFM view and the CVRP run keep the seeded demo layer
+  (and reuse the startup routing solve) — labelled as such, never blended in
+  silently.
+- **Elasticities are category defaults** (matched against the eight known
+  category names, else -1.2), lead time is assumed 10 days and shelf space 1.0
+  per SKU. Pricing recommendations on imported data are directional, not
+  gospel.
+- **Nothing is persisted.** The imported dataset lives in process memory only;
+  `POST /api/reset` (or a restart) returns the app to the synthetic dataset —
+  the exact startup objects, so post-reset responses are byte-identical to a
+  fresh boot (also tested).
+
+## Why this plan?
+
+Every plan can explain itself. `GET /api/explain` (surfaced as a collapsible
+**"Why this plan?"** panel on the dashboard, a fifth **Why this plan?** page in
+the executive PDF, and an **Explanation** sheet in the exported workbook — all
+rendered from the same structure, one source of truth) answers four questions:
+
+1. **Which constraints bind?** Working-capital budget utilisation (and how many
+   SKUs the budget forces out of the assortment) and how many price
+   recommendations are clipped at the ±guardrail.
+2. **What changes vs doing nothing?** Per lever, the top 5 SKU-level moves with
+   their individual EUR contributions plus the remainder — moves + remainder
+   sum exactly to the lever total (tested).
+3. **How sensitive is the number?** The same deterministic plan path re-run at
+   budget −10% and +10% (two extra solves that reuse the one routing solve).
+   Fine print: the assortment lever is the optimiser's edge *over the greedy
+   baseline at the same budget*, so a looser budget can shrink the edge even
+   though it captures more absolute margin — the explanation says so instead
+   of hiding it.
+4. **What should you not over-trust?** Auto-included caveats: the data source
+   (synthetic vs your imported file), the constant-elasticity pricing
+   assumption, and the routing solved-once note.
+
 ## Running it
 
 ```bash
@@ -122,25 +187,28 @@ curl -H "Authorization: Bearer changeme" http://localhost:5000/api/health
 
 ```
 dip/data.py        one seeded synthetic dataset (single source of truth)
+dip/importer.py    Excel template + validated import of the user's own SKUs
    |
 dip/analytics.py   KPIs, breakdowns, ABC-XYZ, RFM, margin bridge
 dip/forecast.py    Holt-Winters + rolling-origin MASE backtest
 dip/optimize.py    assortment MILP / elasticity pricing / OR-Tools CVRP
 dip/prescribe.py   composes the lifts into one plan + action cards
+dip/explain.py     "why this plan?" — binding constraints, moves, sensitivity
 dip/exports.py     PDF (matplotlib) and Excel (openpyxl) from that plan
    |
-app.py             Flask: expensive engines cached at startup, one JSON API
+app.py             Flask: engines cached per dataset (synthetic or imported)
    |
 templates/, static/  the executive command-center dashboard (hand-built charts)
 ```
 
-The Flask layer runs every expensive computation once at boot and caches it, so
-the dashboard stays snappy; only the parameterised optimisers (assortment
-budget, price guardrail) compute per request. Routing and pricing are solved
-exactly once at startup, the prescription plan is composed *from* those cached
-results, and the PDF/Excel endpoints and the `--deliverables` CLI reuse the
-same plan object — the routes view, the action cards and the exports cannot
-quote different numbers for the same scenario.
+The Flask layer runs every expensive computation once per dataset and caches
+it, so the dashboard stays snappy; only the parameterised optimisers
+(assortment budget, price guardrail) compute per request. Routing and pricing
+are solved exactly once per dataset, the prescription plan is composed *from*
+those cached results, and the `/api/explain` endpoint, the PDF/Excel endpoints
+and the `--deliverables` CLI reuse the same plan object — the routes view, the
+action cards, the explanation and the exports cannot quote different numbers
+for the same scenario, in synthetic *and* in imported mode (tested both ways).
 
 ## Synthetic data & limitations
 
