@@ -32,10 +32,13 @@ Four things, layered:
 
 1. **Describe** — headline KPIs, revenue breakdowns (region / category /
    channel), an ABC-XYZ inventory classification, RFM customer segmentation,
-   and a price/volume/mix gross-margin bridge. The ABC-XYZ cells and RFM
-   segment bars drill down to the underlying SKU and customer tables, so "CZ
-   is dead weight" resolves to actual SKU names and "call the at-risk
-   accounts" to actual customers.
+   a price/volume/mix gross-margin bridge, and cross-sell association rules
+   mined from the order baskets. The ABC-XYZ cells and RFM segment bars drill
+   down to the underlying SKU and customer tables, so "CZ is dead weight"
+   resolves to actual SKU names and "call the at-risk accounts" to actual
+   customers — and the Revenue and Gross-margin KPI tiles drill down to
+   revenue-by-segment and margin-by-category tables that sum back to the
+   headline exactly.
 2. **Forecast** — monthly revenue projected six months out with an additive
    Holt-Winters model, with the error *earned* through a rolling-origin
    backtest rather than asserted.
@@ -147,6 +150,52 @@ rendered from the same structure, one source of truth) answers four questions:
    (synthetic vs your imported file), the constant-elasticity pricing
    assumption, and the routing solved-once note.
 
+## Cross-sell: what sells together
+
+`GET /api/crosssell` (a **Cross-sell** card on the dashboard, a `Cross-sell`
+sheet in the exported workbook) mines association rules over the platform's
+order baskets with a from-scratch Apriori engine adapted by copy from my
+`market-basket-analysis` project — the same dependency-by-copy pattern used
+elsewhere, so this repo stays self-contained.
+One basket per synthetic customer order event (the exact order months the RFM
+history already counts), built deterministically in `dip/data.py` as part of
+the *one* seeded dataset — the basket draws are appended to the end of the rng
+stream, so every number quoted above is byte-identical to builds that predate
+the feature (pinned by a regression test).
+
+`GET /api/crosssell?product=SKU-0086&top=5` returns the top-N cross-sell
+recommendations for one product; every rule ships with its **support**
+(share of baskets containing both SKUs), **confidence** (share of the
+antecedent's baskets that also contain the consequent), **lift**
+(confidence vs the consequent's baseline rate) and the absolute basket count
+behind it.
+
+Honesty notes (they ride on the API payload, the dashboard card and the
+workbook sheet):
+
+- **All of it is computed on the seeded synthetic demo data.** No real
+  purchasing behaviour is involved; the mined structure is the region/demand
+  affinity the generator itself puts into the baskets.
+- **Lift is co-occurrence, not causation.** A lift of 4 means the pair shares
+  baskets four times more often than independence would predict *in this
+  history* — it is not a promise of sales uplift, and a campaign built on a
+  rule would still need an A/B test.
+- Rules backed by fewer baskets than the stability threshold are kept but
+  flagged **`thin_support`** (and badged on the dashboard) instead of being
+  quietly presented as solid.
+- **Excel imports carry no order-line data** (the template covers products
+  and monthly units only), so cross-sell reports itself unavailable on
+  imported datasets rather than inventing baskets for them.
+
+## KPI drill-downs
+
+The **Revenue** and **Gross margin** headline tiles click open to
+`GET /api/kpis/drilldown`: revenue by (region × channel) segment and gross
+margin by category (revenue, COGS, margin, margin %, share). The rows
+partition the same monthly ledger the KPI tiles are computed from, so each
+drill-down sums to its headline **to the cent** — asserted by tests, on
+screen and in the workbook's `Drill-downs` sheet alike.
+
 ## Running it
 
 ```bash
@@ -189,7 +238,8 @@ curl -H "Authorization: Bearer changeme" http://localhost:5000/api/health
 dip/data.py        one seeded synthetic dataset (single source of truth)
 dip/importer.py    Excel template + validated import of the user's own SKUs
    |
-dip/analytics.py   KPIs, breakdowns, ABC-XYZ, RFM, margin bridge
+dip/analytics.py   KPIs (+ drill-downs), breakdowns, ABC-XYZ, RFM, margin bridge
+dip/crosssell.py   Apriori cross-sell rules (adapted from market-basket-analysis)
 dip/forecast.py    Holt-Winters + rolling-origin MASE backtest
 dip/optimize.py    assortment MILP / elasticity pricing / OR-Tools CVRP
 dip/prescribe.py   composes the lifts into one plan + action cards

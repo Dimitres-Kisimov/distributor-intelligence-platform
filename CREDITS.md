@@ -19,5 +19,11 @@ All front-end charts are hand-built (HTML Canvas + inline SVG). No charting
 CDN or third-party JavaScript is used — this is deliberate, to keep the
 platform self-contained and to showcase the data-visualisation work.
 
+## Internal reuse
+`dip/crosssell.py` adapts the from-scratch Apriori frequent-itemset miner and
+association-rule metrics from the author's own `market-basket-analysis`
+project (© Dimitres Kisimov) — dependency-by-copy with an attribution header,
+so this repository stays self-contained.
+
 ## Author
 Dimitres Kisimov, 2026.
