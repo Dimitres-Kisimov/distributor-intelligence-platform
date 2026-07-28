@@ -26,6 +26,7 @@
     <a class="nav-item" data-target="sec-assortment"><span class="dot"></span> Assortment</a>
     <a class="nav-item" data-target="sec-routes"><span class="dot"></span> Delivery routes</a>
     <a class="nav-item" data-target="sec-segments"><span class="dot"></span> Customer segments</a>
+    <a class="nav-item" data-target="sec-crosssell"><span class="dot"></span> Cross-sell</a>
     <a class="nav-item" data-target="sec-actions"><span class="dot"></span> Recommended actions</a>
     <a class="nav-item" data-target="sec-why"><span class="dot"></span> Why this plan?</a>
     <div class="nav-spacer"></div>
@@ -109,13 +110,13 @@
 
       <!-- KPI row -->
       <section id="sec-overview" class="kpi-row">
-        <div class="kpi">
-          <div class="label">Revenue (24 mo)</div>
+        <div class="kpi clickable" id="kpiRevenueTile" role="button" tabindex="0" title="Click for the revenue drill-down by region × channel segment — the segments sum to this headline exactly">
+          <div class="label">Revenue (24 mo) <span class="info">?</span></div>
           <div class="value" id="kpi-revenue">—</div>
-          <div class="delta" id="kpi-revenue-sub">gross of returns</div>
+          <div class="delta" id="kpi-revenue-sub">gross of returns · click to drill down</div>
         </div>
-        <div class="kpi green">
-          <div class="label">Gross margin</div>
+        <div class="kpi green clickable" id="kpiMarginTile" role="button" tabindex="0" title="Click for the gross-margin drill-down by category — the categories sum to this headline exactly">
+          <div class="label">Gross margin <span class="info">?</span></div>
           <div class="value" id="kpi-margin">—</div>
           <div class="delta" id="kpi-margin-sub">—</div>
         </div>
@@ -133,6 +134,20 @@
           <div class="label">OTIF service <span class="info">?</span></div>
           <div class="value" id="kpi-otif">—</div>
           <div class="delta" id="kpi-otif-sub">modelled from lead times</div>
+        </div>
+      </section>
+
+      <!-- KPI drill-down (hidden until a headline tile is clicked) -->
+      <section class="card" id="kpiDrillCard" hidden>
+        <div class="card-head">
+          <div class="card-title" id="kpiDrillTitle">—</div>
+          <div class="head-controls">
+            <span class="card-note" id="kpiDrillNote">segments sum to the headline exactly</span>
+            <button class="btn drill-close" id="kpiDrillClose" type="button">Close</button>
+          </div>
+        </div>
+        <div class="drill-scroll">
+          <table class="drill-table" id="kpiDrillTable"></table>
         </div>
       </section>
 
@@ -264,6 +279,23 @@
             </div>
           </div>
           <div class="actions" id="actions"></div>
+        </div>
+
+        <!-- Cross-sell associations (market-basket mining on synthetic baskets) -->
+        <div class="card col-12" id="sec-crosssell">
+          <div class="card-head">
+            <div class="card-title">Cross-sell: what sells together <span class="info" title="Association rules (Apriori) mined from the synthetic order baskets — one basket per customer order event. Lift above 1 means the two SKUs share a basket more often than independence would predict. Co-occurrence, not causation: a real campaign still needs an A/B test.">?</span></div>
+            <div class="head-controls">
+              <select class="select" id="crossProduct" title="Narrow the rules to one product (only SKUs with at least one rule above the thresholds are listed)">
+                <option value="">All products</option>
+              </select>
+              <span class="pill blue" id="crossPill">—</span>
+            </div>
+          </div>
+          <div class="drill-scroll cross-scroll">
+            <table class="drill-table" id="crossTable"></table>
+          </div>
+          <div class="legend"><span class="lg" id="crossNote">—</span></div>
         </div>
 
         <!-- Why this plan? — plain-language explanation from /api/explain -->

@@ -11,6 +11,11 @@ Entities
 - ``monthly``    : month x sku fact table (units, revenue, cogs) with seasonality+trend
 - ``customers``  : ~50 delivery customers with coordinates + RFM order history
 - ``route_stops``: one representative delivery run for the routing engine
+- ``order_lines``: one basket of SKUs per customer order event (the exact order
+  months the RFM history counts), for the cross-sell mining view. Generated
+  *after* every other entity so the added draws cannot disturb any previously
+  published number — the KPI/forecast/optimiser figures are byte-identical to
+  builds that predate this table.
 """
 
 from __future__ import annotations
@@ -42,6 +47,16 @@ CATEGORIES = {
     "Pantry": (1.4, 4.0, -1.4),
 }
 
+# ---- order-line baskets (cross-sell mining) ---------------------------------
+# One basket per customer order event — the same order months the RFM history
+# counts, so basket volume and order frequency tell one story. Composition is
+# drawn deterministically: SKU weights are demand share times a same-region
+# affinity (customers mostly buy the range stocked for their region), and the
+# number of lines scales with the customer's tier.
+REGION_AFFINITY = 6.0
+BASKET_BASE_LINES = 3
+TIER_EXTRA_LINES = {"Key Account": 9.0, "Growth": 6.0, "Long Tail": 3.0}
+
 
 @dataclass
 class Dataset:
@@ -53,6 +68,11 @@ class Dataset:
     route_stops: list[dict]
     depot: dict
     months: list[str] = field(default_factory=list)
+    # One dict per customer order event: {order_id, customer_id, month, sku_ids}.
+    # ``None`` means the dataset carries no basket data (e.g. an Excel import,
+    # whose template covers products only) — cross-sell mining then reports
+    # itself unavailable instead of inventing baskets.
+    order_lines: list[dict] | None = None
 
     @property
     def n_months(self) -> int:
@@ -196,9 +216,49 @@ def _build_customers(rng: np.random.Generator, months: list[str]) -> list[dict]:
                 "frequency": int(frequency),
                 "monetary": monetary,
                 "demand_kg": demand_kg,
+                # retained (not re-drawn) so the order-line baskets are built on
+                # the exact order events the RFM frequency already counts
+                "order_months": [int(m) for m in sorted(order_months)],
             }
         )
     return customers
+
+
+def _build_order_lines(
+    rng: np.random.Generator, skus: list[dict], customers: list[dict], months: list[str]
+) -> list[dict]:
+    """One SKU basket per customer order event, for cross-sell mining.
+
+    Reuses the entities that already exist: each customer's retained
+    ``order_months`` (the events RFM counts) becomes one basket; the SKUs in it
+    are drawn without replacement, weighted by demand share times a same-region
+    affinity, with the line count scaled by the customer's tier. Called *last*
+    in :func:`build_dataset`, so the extra rng draws leave every previously
+    generated number untouched.
+    """
+    sku_ids = [s["sku_id"] for s in skus]
+    demand = np.array([s["demand_mean"] for s in skus], dtype=float)
+    regions = np.array([s["region"] for s in skus])
+
+    order_lines: list[dict] = []
+    order_no = 0
+    for cust in customers:
+        weights = demand * np.where(regions == cust["region"], REGION_AFFINITY, 1.0)
+        p = weights / weights.sum()
+        extra = TIER_EXTRA_LINES[cust["tier"]]
+        for mi in cust["order_months"]:
+            order_no += 1
+            n_lines = min(BASKET_BASE_LINES + int(rng.poisson(extra)), len(skus))
+            picks = rng.choice(len(skus), size=n_lines, replace=False, p=p)
+            order_lines.append(
+                {
+                    "order_id": f"ORD-{order_no:04d}",
+                    "customer_id": cust["customer_id"],
+                    "month": months[mi],
+                    "sku_ids": sorted(sku_ids[int(i)] for i in picks),
+                }
+            )
+    return order_lines
 
 
 def _build_route_stops(rng: np.random.Generator, customers: list[dict]) -> tuple[list[dict], dict]:
@@ -219,6 +279,10 @@ def build_dataset() -> Dataset:
     monthly = _build_monthly(rng, skus, months)
     customers = _build_customers(rng, months)
     route_stops, depot = _build_route_stops(rng, customers)
+    # Built last on purpose: the order-line draws are appended to the rng
+    # stream, so every number generated above stays byte-identical to builds
+    # that predate the cross-sell feature (pinned by a regression test).
+    order_lines = _build_order_lines(rng, skus, customers, months)
     return Dataset(
         skus=skus,
         monthly=monthly,
@@ -226,6 +290,7 @@ def build_dataset() -> Dataset:
         route_stops=route_stops,
         depot=depot,
         months=months,
+        order_lines=order_lines,
     )
 
 
@@ -234,3 +299,4 @@ if __name__ == "__main__":  # pragma: no cover - manual smoke check
     print(f"SKUs: {len(ds.skus)}  months: {ds.n_months}  rows: {len(ds.monthly['sku_id'])}")
     print(f"Customers: {len(ds.customers)}  route stops: {len(ds.route_stops)}")
     print(f"Total revenue: EUR {ds.monthly['revenue'].sum():,.0f}")
+    print(f"Order baskets: {len(ds.order_lines)}")

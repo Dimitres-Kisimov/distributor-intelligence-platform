@@ -90,6 +90,79 @@ def revenue_breakdown(ds: Dataset | None = None) -> dict:
     }
 
 
+def kpi_drilldown(ds: Dataset | None = None) -> dict:
+    """Drill-downs behind the KPI headline tiles.
+
+    - ``revenue_by_segment``: revenue per (region x channel) segment of the
+      monthly ledger. The segment rows partition the ledger, so their sum IS
+      the headline revenue KPI (tested to the cent).
+    - ``margin_by_category``: revenue, COGS and gross margin per category;
+      the category gross margins sum to the headline gross-margin KPI.
+
+    Totals are computed with the exact same expressions :func:`kpis` uses, so
+    the drill-down can never quote a different headline than the tiles.
+    """
+    ds = ds or build_dataset()
+    m = ds.monthly
+
+    total_revenue = round(float(m["revenue"].sum()), 2)
+    total_cogs = round(float(m["cogs"].sum()), 2)
+    total_margin = round(total_revenue - total_cogs, 2)
+
+    # revenue by (region x channel) segment
+    seg: dict[tuple[str, str], float] = {}
+    for region, channel, rev in zip(m["region"], m["channel"], m["revenue"]):
+        key = (str(region), str(channel))
+        seg[key] = seg.get(key, 0.0) + float(rev)
+    revenue_rows = [
+        {
+            "region": region,
+            "channel": channel,
+            "revenue": round(rev, 2),
+            "share": round(rev / total_revenue, 4) if total_revenue else 0.0,
+        }
+        for (region, channel), rev in sorted(
+            seg.items(), key=lambda kv: (-kv[1], kv[0])
+        )
+    ]
+
+    # margin by category
+    cat: dict[str, dict[str, float]] = {}
+    for category, rev, cogs in zip(m["category"], m["revenue"], m["cogs"]):
+        d = cat.setdefault(str(category), {"revenue": 0.0, "cogs": 0.0})
+        d["revenue"] += float(rev)
+        d["cogs"] += float(cogs)
+    margin_rows = []
+    for category, d in sorted(
+        cat.items(), key=lambda kv: (-(kv[1]["revenue"] - kv[1]["cogs"]), kv[0])
+    ):
+        margin = d["revenue"] - d["cogs"]
+        margin_rows.append(
+            {
+                "category": category,
+                "revenue": round(d["revenue"], 2),
+                "cogs": round(d["cogs"], 2),
+                "gross_margin": round(margin, 2),
+                "margin_pct": round(margin / d["revenue"], 4) if d["revenue"] else 0.0,
+                "share_of_margin": round(margin / total_margin, 4) if total_margin else 0.0,
+            }
+        )
+
+    return {
+        "revenue_by_segment": {"rows": revenue_rows, "total_revenue": total_revenue},
+        "margin_by_category": {
+            "rows": margin_rows,
+            "total_revenue": total_revenue,
+            "total_cogs": total_cogs,
+            "total_gross_margin": total_margin,
+        },
+        "note": (
+            "Drill-downs partition the same monthly ledger the KPI tiles are "
+            "computed from — segment rows sum to the headline numbers exactly."
+        ),
+    }
+
+
 def abc_xyz(ds: Dataset | None = None) -> dict:
     """ABC (revenue Pareto) x XYZ (demand variability) classification.
 

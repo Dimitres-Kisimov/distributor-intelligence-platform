@@ -108,7 +108,7 @@ function initNav() {
 }
 
 /* ------------------------------------------------------------------ state */
-const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
+const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, crosssell: null, crossProduct: "", crossRecs: null, kpiDrilldown: null, kpiDrillOpen: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
 
 /* ------------------------------------------------------------------ KPIs */
 function renderKPIs() {
@@ -374,6 +374,129 @@ function renderCustDrill() {
 function initDrills() {
   $("#skuDrillClose").addEventListener("click", () => { STATE.drillCell = null; renderSkuDrill(); });
   $("#custDrillClose").addEventListener("click", () => { STATE.drillSegment = null; renderCustDrill(); });
+}
+
+/* ---------------------------------------------- KPI headline drill-downs
+   Clicking the Revenue tile opens revenue by (region x channel) segment;
+   clicking the Gross-margin tile opens margin by category. The rows partition
+   the same ledger the tiles are computed from, so they sum to the headline
+   exactly — the server (and the exported Drill-downs sheet) quote the same
+   numbers. */
+function toggleKpiDrill(which) {
+  STATE.kpiDrillOpen = STATE.kpiDrillOpen === which ? null : which;
+  renderKpiDrill();
+}
+
+function renderKpiDrill() {
+  const box = $("#kpiDrillCard");
+  const which = STATE.kpiDrillOpen;
+  const dd = STATE.kpiDrilldown;
+  $("#kpiRevenueTile").classList.toggle("sel", which === "revenue");
+  $("#kpiMarginTile").classList.toggle("sel", which === "margin");
+  if (!which || !dd) { box.hidden = true; return; }
+  if (which === "revenue") {
+    const d = dd.revenue_by_segment;
+    $("#kpiDrillTitle").textContent = `Revenue by segment (region × channel) — ${eurFull(d.total_revenue)} total`;
+    $("#kpiDrillNote").textContent = "the 15 segments partition the ledger and sum to the headline exactly";
+    $("#kpiDrillTable").innerHTML =
+      `<tr><th>Region</th><th>Channel</th><th class="num">Revenue</th><th class="num">Share</th></tr>` +
+      d.rows.map((r) => `<tr>
+          <td>${esc(r.region)}</td>
+          <td>${esc(r.channel)}</td>
+          <td class="num">${eurFull(r.revenue)}</td>
+          <td class="num">${pct(r.share)}</td>
+        </tr>`).join("") +
+      `<tr><td><b>Total</b></td><td></td><td class="num"><b>${eurFull(d.total_revenue)}</b></td><td class="num">100.0%</td></tr>`;
+  } else {
+    const d = dd.margin_by_category;
+    $("#kpiDrillTitle").textContent = `Gross margin by category — ${eurFull(d.total_gross_margin)} total`;
+    $("#kpiDrillNote").textContent = "category margins sum to the headline gross margin exactly";
+    $("#kpiDrillTable").innerHTML =
+      `<tr><th>Category</th><th class="num">Revenue</th><th class="num">COGS</th><th class="num">Gross margin</th><th class="num">Margin %</th><th class="num">Share of margin</th></tr>` +
+      d.rows.map((r) => `<tr>
+          <td>${esc(r.category)}</td>
+          <td class="num">${eurFull(r.revenue)}</td>
+          <td class="num">${eurFull(r.cogs)}</td>
+          <td class="num">${eurFull(r.gross_margin)}</td>
+          <td class="num">${pct(r.margin_pct)}</td>
+          <td class="num">${pct(r.share_of_margin)}</td>
+        </tr>`).join("") +
+      `<tr><td><b>Total</b></td><td class="num"><b>${eurFull(d.total_revenue)}</b></td><td class="num"><b>${eurFull(d.total_cogs)}</b></td><td class="num"><b>${eurFull(d.total_gross_margin)}</b></td><td></td><td class="num">100.0%</td></tr>`;
+  }
+  box.hidden = false;
+}
+
+function initKpiDrill() {
+  const wire = (id, which) => {
+    const el = $(id);
+    el.addEventListener("click", () => toggleKpiDrill(which));
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleKpiDrill(which); } });
+  };
+  wire("#kpiRevenueTile", "revenue");
+  wire("#kpiMarginTile", "margin");
+  $("#kpiDrillClose").addEventListener("click", () => { STATE.kpiDrillOpen = null; renderKpiDrill(); });
+}
+
+/* ------------------------------------------------------------ cross-sell
+   Association rules (Apriori, adapted from the author's market-basket-analysis
+   engine) mined server-side over the synthetic order baskets and cached per
+   dataset. The card always restates the honesty note the API sends: synthetic
+   demo data, and lift = co-occurrence, not a promise of uplift. */
+function crossRows(rules) {
+  if (!rules || !rules.length) {
+    return `<tr><td colspan="7" class="dim">No association rules clear the thresholds here.</td></tr>`;
+  }
+  return rules.map((r) => `<tr>
+      <td><b>${esc(r.antecedent)}</b> <span class="dim">${esc(r.antecedent_name)}</span></td>
+      <td><b>${esc(r.consequent)}</b> <span class="dim">${esc(r.consequent_name)}</span></td>
+      <td>${esc(r.consequent_category)}</td>
+      <td class="num">${pct(r.support)}</td>
+      <td class="num">${pct(r.confidence, 0)}</td>
+      <td class="num">${r.lift.toFixed(2)}×</td>
+      <td class="num">${r.support_count}${r.thin_support ? ' <span class="badge-thin" title="Backed by few baskets — metrics are unstable">thin</span>' : ""}</td>
+    </tr>`).join("");
+}
+
+function renderCrosssell() {
+  const cs = STATE.crosssell;
+  if (!cs) return;
+  const note = $("#crossNote"), pill = $("#crossPill"), table = $("#crossTable"), sel = $("#crossProduct");
+  note.textContent = cs.note;
+  if (!cs.available) {
+    pill.textContent = "unavailable on imported data";
+    sel.disabled = true;
+    table.innerHTML = `<tr><td class="dim">${esc(cs.note)}</td></tr>`;
+    return;
+  }
+  sel.disabled = false;
+  // (re)build the product picker, keeping the current selection
+  const current = STATE.crossProduct;
+  sel.innerHTML = `<option value="">All products (top rules by lift)</option>` +
+    cs.products.map((p) => `<option value="${esc(p.sku_id)}"${p.sku_id === current ? " selected" : ""}>${esc(p.sku_id)} — ${esc(p.name)} (${p.n_rules})</option>`).join("");
+  const head = `<tr><th>If they buy</th><th>Also sells</th><th>Category</th><th class="num" title="Share of all baskets containing both SKUs">Support</th><th class="num" title="Share of the antecedent's baskets that also contain the consequent">Confidence</th><th class="num" title="Confidence vs the consequent's baseline rate — observed co-occurrence, not causation">Lift</th><th class="num">Baskets</th></tr>`;
+  if (current && STATE.crossRecs && STATE.crossRecs.product === current) {
+    pill.textContent = `${STATE.crossRecs.recommendations.length} rules · ${cs.n_baskets} baskets`;
+    table.innerHTML = head + crossRows(STATE.crossRecs.recommendations);
+  } else {
+    pill.textContent = `${cs.n_rules} rules · ${cs.n_baskets} baskets`;
+    table.innerHTML = head + crossRows(cs.rules);
+  }
+}
+
+function initCrosssell() {
+  $("#crossProduct").addEventListener("change", async (e) => {
+    STATE.crossProduct = e.target.value;
+    STATE.crossRecs = null;
+    if (STATE.crossProduct) {
+      try {
+        STATE.crossRecs = await getJSON("/api/crosssell?product=" + encodeURIComponent(STATE.crossProduct) + "&top=10");
+      } catch (err) {
+        $("#crossPill").textContent = "load failed — pick a product to retry";
+        return;
+      }
+    }
+    renderCrosssell();
+  });
 }
 
 /* ------------------------------------------------------------ RFM segments */
@@ -818,6 +941,7 @@ function renderActions() {
 function renderAll() {
   renderKPIs(); renderForecast(); renderBreakdown(); renderMargin();
   renderHeat(); renderRFM(); renderRoutes(); renderAssort(); renderActions();
+  renderCrosssell(); renderKpiDrill();
 }
 
 /* ------------------------------------------------------------ focused views */
@@ -839,7 +963,7 @@ function applyFocusView() {
 async function loadData() {
   // no budget param: the server answers with its default (40% of full capital),
   // so the first render can never drift from the server-side definition.
-  const [forecast, margin, abc, rfm, revenue, routes, assort] = await Promise.all([
+  const [forecast, margin, abc, rfm, revenue, routes, assort, crosssell, kpiDrilldown] = await Promise.all([
     getJSON("/api/forecast"),
     getJSON("/api/margin-bridge"),
     getJSON("/api/abc-xyz"),
@@ -847,9 +971,12 @@ async function loadData() {
     getJSON("/api/revenue"),
     getJSON("/api/optimize/routes"),
     getJSON("/api/optimize/assortment"),
+    getJSON("/api/crosssell?top=50"),
+    getJSON("/api/kpis/drilldown"),
   ]);
   STATE.forecast = forecast; STATE.margin = margin; STATE.abc = abc;
   STATE.rfm = rfm; STATE.revenue = revenue; STATE.routes = routes; STATE.assort = assort;
+  STATE.crosssell = crosssell; STATE.kpiDrilldown = kpiDrilldown;
   // sync slider to the server-reported budget share
   $("#budgetSlider").value = Math.round((assort.budget / assort.full_capital) * 100);
   $("#loadError").hidden = true;
@@ -867,6 +994,8 @@ async function boot() {
   initSummaryCopy();
   initCompare();
   initDrills();
+  initKpiDrill();
+  initCrosssell();
   initImport();
   initWhy();
   STATE.kpis = window.__INITIAL__.kpis;

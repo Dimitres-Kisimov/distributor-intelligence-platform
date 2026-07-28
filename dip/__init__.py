@@ -1,13 +1,21 @@
 """Distributor Intelligence Platform — analytics, forecasting and optimisation
 engines behind one Flask decision-intelligence application.
 
-Author: Dimitres Kisimov, 2026. MIT licensed.
+Author: Dimitres Kisimov, 2026. All rights reserved (portfolio review — see LICENSE).
 """
 
 __version__ = "1.0.0"
 __author__ = "Dimitres Kisimov"
 
-from .analytics import abc_xyz, kpis, margin_bridge, revenue_breakdown, rfm_segments
+from .analytics import (
+    abc_xyz,
+    kpi_drilldown,
+    kpis,
+    margin_bridge,
+    revenue_breakdown,
+    rfm_segments,
+)
+from .crosssell import mine_crosssell
 from .data import build_dataset
 from .forecast import forecast_revenue
 from .optimize import optimize_assortment, optimize_prices, optimize_routes
@@ -18,8 +26,10 @@ __all__ = [
     "build_dataset",
     "build_plan",
     "forecast_revenue",
+    "kpi_drilldown",
     "kpis",
     "margin_bridge",
+    "mine_crosssell",
     "optimize_assortment",
     "optimize_prices",
     "optimize_routes",

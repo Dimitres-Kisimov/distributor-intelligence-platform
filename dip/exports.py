@@ -24,11 +24,13 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from .analytics import (
     abc_xyz,
+    kpi_drilldown,
     kpis,
     margin_bridge,
     revenue_breakdown,
     rfm_segments,
 )
+from .crosssell import mine_crosssell
 from .data import Dataset, build_dataset
 from .explain import explain_plan
 from .forecast import forecast_revenue
@@ -382,6 +384,67 @@ def build_excel(
         ws.cell(row=r, column=1, value=seg["segment"]); ws.cell(row=r, column=2, value=seg["count"])
         ws.cell(row=r, column=3, value=seg["monetary"])
     ws.column_dimensions["A"].width = 24
+
+    # KPI drill-downs — the same rows the dashboard's headline tiles open;
+    # both are computed by dip.analytics.kpi_drilldown, so they cannot differ.
+    kd = kpi_drilldown(ds)
+    ws = wb.create_sheet("Drill-downs")
+    ws["A1"] = "Revenue by segment (region x channel)"
+    ws["A1"].font = Font(bold=True, size=12)
+    _header(ws, 2, ["Region", "Channel", "Revenue (EUR)", "Share"])
+    r = 3
+    for row in kd["revenue_by_segment"]["rows"]:
+        ws.cell(row=r, column=1, value=row["region"]); ws.cell(row=r, column=2, value=row["channel"])
+        ws.cell(row=r, column=3, value=row["revenue"]); ws.cell(row=r, column=4, value=row["share"])
+        r += 1
+    ws.cell(row=r, column=1, value="Total").font = Font(bold=True)
+    ws.cell(row=r, column=3, value=kd["revenue_by_segment"]["total_revenue"]).font = Font(bold=True)
+    r += 2
+    ws.cell(row=r, column=1, value="Gross margin by category").font = Font(bold=True, size=12)
+    r += 1
+    _header(ws, r, ["Category", "Revenue (EUR)", "COGS (EUR)", "Gross margin (EUR)", "Margin %", "Share of margin"])
+    for row in kd["margin_by_category"]["rows"]:
+        r += 1
+        ws.cell(row=r, column=1, value=row["category"]); ws.cell(row=r, column=2, value=row["revenue"])
+        ws.cell(row=r, column=3, value=row["cogs"]); ws.cell(row=r, column=4, value=row["gross_margin"])
+        ws.cell(row=r, column=5, value=row["margin_pct"]); ws.cell(row=r, column=6, value=row["share_of_margin"])
+    r += 1
+    ws.cell(row=r, column=1, value="Total").font = Font(bold=True)
+    ws.cell(row=r, column=2, value=kd["margin_by_category"]["total_revenue"]).font = Font(bold=True)
+    ws.cell(row=r, column=3, value=kd["margin_by_category"]["total_cogs"]).font = Font(bold=True)
+    ws.cell(row=r, column=4, value=kd["margin_by_category"]["total_gross_margin"]).font = Font(bold=True)
+    r += 2
+    ws.cell(row=r, column=1, value=kd["note"]).font = Font(italic=True, size=9, color="6B7488")
+    for col, width in (("A", 18), ("B", 14), ("C", 14), ("D", 18), ("E", 10), ("F", 14)):
+        ws.column_dimensions[col].width = width
+
+    # Cross-sell rules — deterministic mining, so this sheet quotes the exact
+    # numbers /api/crosssell (and the dashboard card) serve for this dataset.
+    cs = mine_crosssell(ds)
+    ws = wb.create_sheet("Cross-sell")
+    ws["A1"] = "Cross-sell association rules (Apriori)"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = cs["note"]
+    ws["A2"].font = Font(italic=True, size=9, color="6B7488")
+    if not cs["available"]:
+        ws["A4"] = "No basket data in this dataset."
+    else:
+        ws["A3"] = (
+            f"{cs['n_rules']} rules from {cs['n_baskets']} baskets "
+            f"(min support {cs['params']['min_support']}, min confidence "
+            f"{cs['params']['min_confidence']}, min lift {cs['params']['min_lift']}); top 40 by lift below. "
+            "Rules on few baskets are flagged thin."
+        )
+        ws["A3"].font = Font(size=9, color="6B7488")
+        _header(ws, 5, ["If they buy", "Name", "Also sells", "Name", "Support", "Confidence", "Lift", "Baskets", "Thin support?"])
+        for r, rule in enumerate(cs["rules"][:40], start=6):
+            ws.cell(row=r, column=1, value=rule["antecedent"]); ws.cell(row=r, column=2, value=rule["antecedent_name"])
+            ws.cell(row=r, column=3, value=rule["consequent"]); ws.cell(row=r, column=4, value=rule["consequent_name"])
+            ws.cell(row=r, column=5, value=rule["support"]); ws.cell(row=r, column=6, value=rule["confidence"])
+            ws.cell(row=r, column=7, value=rule["lift"]); ws.cell(row=r, column=8, value=rule["support_count"])
+            ws.cell(row=r, column=9, value="thin" if rule["thin_support"] else "")
+    for col, width in (("A", 12), ("B", 16), ("C", 12), ("D", 16), ("E", 10), ("F", 11), ("G", 8), ("H", 9), ("I", 12)):
+        ws.column_dimensions[col].width = width
 
     # Actions
     ws = wb.create_sheet("Actions")

@@ -16,10 +16,11 @@ in process memory only; nothing is written to disk.
 Routes
 ------
 HTML : ``/`` dashboard, ``/routes`` and ``/assortment`` focused sub-views
-API  : ``/api/kpis`` ``/api/forecast`` ``/api/margin-bridge`` ``/api/abc-xyz``
-       ``/api/rfm`` ``/api/revenue`` ``/api/optimize/assortment``
-       ``/api/optimize/prices`` ``/api/optimize/routes`` ``/api/prescribe``
-       ``/api/explain`` ``/api/import`` ``/api/import/template`` ``/api/reset``
+API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
+       ``/api/margin-bridge`` ``/api/abc-xyz`` ``/api/rfm`` ``/api/revenue``
+       ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
+       ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
+       ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
 
@@ -42,7 +43,16 @@ from flask import (
 )
 from flask.json.provider import DefaultJSONProvider
 
-from dip import analytics, explain, exports, forecast, importer, optimize, prescribe
+from dip import (
+    analytics,
+    crosssell,
+    explain,
+    exports,
+    forecast,
+    importer,
+    optimize,
+    prescribe,
+)
 from dip.data import build_dataset
 
 
@@ -71,11 +81,13 @@ def _build_cache(ds, routes: dict | None = None) -> dict:
     """Run every engine once for ``ds``; ``routes`` may reuse an earlier solve."""
     cache = {
         "kpis": analytics.kpis(ds),
+        "kpi_drilldown": analytics.kpi_drilldown(ds),
         "forecast": forecast.forecast_revenue(ds),
         "margin_bridge": analytics.margin_bridge(ds),
         "abc_xyz": analytics.abc_xyz(ds),
         "rfm": analytics.rfm_segments(ds),
         "revenue": analytics.revenue_breakdown(ds),
+        "crosssell": crosssell.mine_crosssell(ds),
         "prices": optimize.optimize_prices(ds),
         "routes": routes if routes is not None else optimize.optimize_routes(ds),
     }
@@ -199,6 +211,24 @@ def _float_arg(name: str, default: float | None = None) -> float | None:
     return value
 
 
+def _int_arg(name: str, default: int, lo: int, hi: int) -> int:
+    """Parse an integer query parameter strictly: absent -> default, junk -> 400.
+
+    Same philosophy as :func:`_float_arg` — reject unparseable input instead of
+    silently answering a different question. Values are clamped to [lo, hi].
+    """
+    raw = request.args.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        abort(make_response(
+            jsonify({"error": f"query parameter '{name}' must be an integer, got {raw!r}"}), 400
+        ))
+    return max(lo, min(hi, value))
+
+
 # ---- HTML ------------------------------------------------------------------
 def _render_dashboard(view: str) -> str:
     st = STATE
@@ -268,6 +298,51 @@ def api_rfm():
 @app.route("/api/revenue")
 def api_revenue():
     return jsonify(STATE["cache"]["revenue"])
+
+
+@app.route("/api/kpis/drilldown")
+def api_kpi_drilldown():
+    """Revenue-by-segment and margin-by-category behind the KPI headline tiles.
+
+    Served from the per-dataset cache, so the numbers here are the exact ones
+    the tiles (and the exported workbook's Drill-downs sheet) quote — the
+    segment rows sum to the headline KPIs to the cent.
+    """
+    st = STATE
+    return jsonify({**st["cache"]["kpi_drilldown"], "source": st["source"]})
+
+
+@app.route("/api/crosssell")
+def api_crosssell():
+    """Cross-sell association rules mined from the synthetic order baskets.
+
+    ``?product=SKU-0001`` narrows to the top-N recommendations for one SKU
+    (404 for a SKU the dataset does not contain); ``?top=N`` caps the list
+    (default 5 per product / 25 overall, max 50). Every payload carries the
+    honesty note: synthetic demo baskets, lift = co-occurrence, not causation.
+    """
+    st = STATE
+    result = st["cache"]["crosssell"]
+    product = request.args.get("product")
+    base = {
+        "available": result["available"],
+        "note": result["note"],
+        "n_baskets": result["n_baskets"],
+        "n_rules": result["n_rules"],
+        "params": result["params"],
+        "source": st["source"],
+    }
+    if product is None:
+        top = _int_arg("top", default=25, lo=1, hi=50)
+        return jsonify({**base, "rules": result["rules"][:top], "products": result["products"]})
+    top = _int_arg("top", default=5, lo=1, hi=50)
+    known = {s["sku_id"] for s in st["ds"].skus}
+    if product not in known:
+        return jsonify(
+            {"error": f"unknown product {product!r} — use a sku_id from /api/abc-xyz per_sku"}
+        ), 404
+    recs = crosssell.recommendations_for(result, product, top=top)
+    return jsonify({**base, "product": product, "recommendations": recs})
 
 
 @app.route("/api/optimize/assortment")

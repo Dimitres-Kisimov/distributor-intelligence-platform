@@ -183,6 +183,10 @@ body {
 .kpi .delta { font-size: 12px; margin-top: 5px; font-weight: 600; }
 .kpi .delta.up { color: var(--green); }
 .kpi .delta.down { color: var(--pink); }
+.kpi.clickable { cursor: pointer; transition: border-color .12s; }
+.kpi.clickable:hover { border-color: var(--blue); }
+.kpi.clickable:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.kpi.clickable.sel { border-color: var(--blue); }
 
 /* ---------- cards / grid ---------- */
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
@@ -338,6 +342,20 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .import-error-list { margin: 6px 0 0 18px; font-weight: 400; font-size: 12.5px; }
 .import-error-list li { margin: 2px 0; }
 #importError { margin-bottom: 20px; }
+
+/* ---------- cross-sell panel ---------- */
+.select {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 6px 10px; max-width: 260px;
+}
+.select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.cross-scroll { max-height: 320px; }
+.badge-thin {
+  font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 1px 7px;
+  border-radius: 999px; background: color-mix(in srgb, var(--amber) 18%, transparent);
+  color: var(--amber); white-space: nowrap;
+}
 
 /* ---------- why-this-plan panel ---------- */
 .why-body { padding-top: 4px; }
