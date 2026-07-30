@@ -36,6 +36,7 @@ from .explain import explain_plan
 from .forecast import forecast_revenue
 from .optimize import optimize_assortment, optimize_prices, optimize_routes
 from .prescribe import build_plan
+from .scenario import DEFAULT_MAX_CHANGE, KPI_KEYS, compare_scenarios
 
 INK = "#1a2233"
 BLUE = "#2f6bff"
@@ -268,6 +269,7 @@ def build_excel(
     ds: Dataset | None = None,
     source: dict | None = None,
     explanation: dict | None = None,
+    scenario_compare: dict | None = None,
 ) -> bytes:
     """Render the multi-sheet workbook for the given scenario and return its bytes.
 
@@ -276,6 +278,11 @@ def build_excel(
     ``ds`` / ``source`` / ``explanation`` mirror :func:`build_pdf`: the workbook
     reports on the currently served dataset (imported or synthetic) and carries
     an Explanation sheet rendered from the same structure as ``/api/explain``.
+    ``scenario_compare`` is the :func:`dip.scenario.compare_scenarios` A/B
+    structure rendered on the Scenarios sheet; when omitted it is computed here
+    as the default baseline vs the on-screen scenario, so the sheet's numbers
+    match what ``POST /api/scenario/compare`` returns for those two scenarios
+    (screen == export).
     """
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
@@ -284,6 +291,17 @@ def build_excel(
     k = kpis(ds)
     fc = forecast_revenue(ds)
     plan, explanation = _plan_and_explanation(ds, budget, max_change, plan, explanation, source)
+    if scenario_compare is None:
+        scenario_compare = compare_scenarios(
+            ds,
+            scenario_a={
+                "name": "Baseline (default budget & guardrail)",
+                "budget": None,
+                "max_change": DEFAULT_MAX_CHANGE,
+            },
+            scenario_b={"name": "On-screen scenario", "budget": budget, "max_change": max_change},
+            source=source,
+        )
     rb = revenue_breakdown(ds)
     az = abc_xyz(ds)
     assort = optimize_assortment(ds, budget=budget)
@@ -505,6 +523,54 @@ def build_excel(
     ws.column_dimensions["B"].width = 72
     ws.column_dimensions["C"].width = 18
     ws.column_dimensions["D"].width = 14
+
+    # Scenarios — the A/B compare from dip.scenario.compare_scenarios, the exact
+    # numbers POST /api/scenario/compare returns for the same two scenarios.
+    sc = scenario_compare
+    sa, sb = sc["scenario_a"], sc["scenario_b"]
+    ws = wb.create_sheet("Scenarios")
+    ws["A1"] = "Scenario compare (A vs B)"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = sc["provenance"]
+    ws["A2"].font = Font(italic=True, size=9, color="6B7488")
+    ws["A3"] = f"A: {sa['name']}   |   B: {sb['name']}"
+    ws["A3"].font = Font(size=10, color="6B7488")
+    scenario_labels = [
+        ("expected_uplift_eur", "Expected annual uplift (EUR)"),
+        ("expected_uplift_pct", "Uplift % of annual gross margin"),
+        ("pricing_uplift_eur", "Pricing lever (EUR)"),
+        ("assortment_uplift_eur", "Assortment lever vs greedy (EUR)"),
+        ("routing_uplift_eur", "Routing lever (EUR)"),
+        ("margin_captured_eur", "Assortment margin captured (EUR)"),
+        ("capital_used_eur", "Working capital used (EUR)"),
+        ("skus_carried", "SKUs carried"),
+        ("budget_eur", "Working-capital budget (EUR)"),
+    ]
+    # the sheet renders the full compared KPI set, in the module's canonical order
+    assert [key for key, _label in scenario_labels] == list(KPI_KEYS)
+    _header(ws, 5, ["Metric", "Scenario A", "Scenario B", "Delta (B-A)", "Delta %"])
+    r = 6
+    for key, label in scenario_labels:
+        d = sc["deltas"][key]
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=sa["kpis"][key])
+        ws.cell(row=r, column=3, value=sb["kpis"][key])
+        ws.cell(row=r, column=4, value=d["abs"])
+        ws.cell(row=r, column=5, value=d["pct"])
+        r += 1
+    r += 1
+    _header(ws, r, ["Scenario", "Budget (EUR)", "Budget % of capital", "Price guardrail"])
+    for side in (sa, sb):
+        r += 1
+        ws.cell(row=r, column=1, value=side["name"])
+        ws.cell(row=r, column=2, value=side["budget"])
+        ws.cell(row=r, column=3, value=side["budget_pct_of_full"])
+        ws.cell(row=r, column=4, value=side["max_change"])
+    r += 2
+    ws.cell(row=r, column=1, value=sc["note"]).font = Font(italic=True, size=9, color="6B7488")
+    ws.column_dimensions["A"].width = 34
+    for col in ("B", "C", "D", "E"):
+        ws.column_dimensions[col].width = 18
 
     buf = io.BytesIO()
     wb.save(buf)

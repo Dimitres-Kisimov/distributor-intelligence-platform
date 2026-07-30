@@ -196,6 +196,59 @@ partition the same monthly ledger the KPI tiles are computed from, so each
 drill-down sums to its headline **to the cent** — asserted by tests, on
 screen and in the workbook's `Drill-downs` sheet alike.
 
+## Scenario compare (A vs B)
+
+Beyond the on-screen *pin one plan and nudge a control* strip, the platform runs
+a first-class **A/B compare** server-side. `POST /api/scenario/compare` takes two
+*named* scenarios — each a working-capital `budget` (EUR, or `null` for the
+optimiser's default 40%-of-capital) and a price guardrail `max_change` in
+`(0, 1]` — and returns each scenario's KPIs plus the absolute and % deltas
+(scenario B minus A):
+
+```bash
+curl -X POST http://localhost:5000/api/scenario/compare \
+  -H 'Content-Type: application/json' \
+  -d '{"scenario_a":{"name":"Tight","budget":6000,"max_change":0.10},
+       "scenario_b":{"name":"Loose","budget":20000,"max_change":0.15}}'
+```
+
+It is surfaced as a **Scenario A/B** panel on the dashboard (two budget/guardrail
+controls and a Compare button, reusing the existing compare styling) and written
+to a **`Scenarios`** sheet in the exported workbook — the sheet quotes the exact
+numbers the endpoint returns for those two scenarios (screen == export, tested).
+
+Honesty, all disclosed on the payload, the panel and the sheet:
+
+- **Deterministic.** Both scenarios share the one startup routing solve (routing
+  depends on neither knob), and every engine terminates on a fixed seed /
+  solution budget, never a wall clock — so a compare is byte-identical across
+  runs (tested). Bad or out-of-range parameters return `400`, never a plausible
+  wrong answer.
+- **The assortment lever can move against intuition.** It is the MILP's *edge
+  over the greedy baseline at that budget*; a looser budget lets greedy catch
+  up, so a scenario with **more** budget can post a **smaller** assortment delta
+  even while it captures more absolute margin. The compare reports it in `note`
+  rather than hiding it — the same effect the budget sensitivity surfaces.
+
+## Power BI pack
+
+`powerbi/` is a **Power BI Desktop showcase** generated from the platform: run
+`python powerbi/build_star.py` and it writes a star schema to `powerbi/data/` —
+a `fact_sales` fact at month × SKU grain, conformed `dim_sku` / `dim_category` /
+`dim_date` dimensions, a disconnected `kpi_headline` scalar table and a
+`provenance` table that labels the data synthetic — plus `DAX_measures.md`
+(paste-ready measures using `CALCULATE`, `DIVIDE`, `SUMX`/`AVERAGEX`, `RELATED`,
+`DISTINCTCOUNT` and a `DATEADD` time-intelligence pattern) and a `README.md`
+with the model diagram, import steps and three report-page specs.
+
+The script imports `dip` directly (no intermediate JSON), so the CSVs never
+drift from what the app quotes; they are **deterministic and byte-identical
+across runs** (tested), and the `fact_sales` revenue / COGS / gross-margin sums
+**tie to the `kpi_headline` scalars to the cent** — checked at the end of the
+build and pinned by a test. No Power BI licence or tenant is needed to *produce*
+the pack; it ships the star + DAX + build spec so the modelling is fully
+reproducible in Power BI Desktop.
+
 ## Running it
 
 ```bash
@@ -244,11 +297,13 @@ dip/forecast.py    Holt-Winters + rolling-origin MASE backtest
 dip/optimize.py    assortment MILP / elasticity pricing / OR-Tools CVRP
 dip/prescribe.py   composes the lifts into one plan + action cards
 dip/explain.py     "why this plan?" — binding constraints, moves, sensitivity
+dip/scenario.py    A/B compare: two named budget/guardrail scenarios + deltas
 dip/exports.py     PDF (matplotlib) and Excel (openpyxl) from that plan
    |
 app.py             Flask: engines cached per dataset (synthetic or imported)
    |
 templates/, static/  the executive command-center dashboard (hand-built charts)
+powerbi/           star-schema CSV pack + DAX measures (build_star.py)
 ```
 
 The Flask layer runs every expensive computation once per dataset and caches

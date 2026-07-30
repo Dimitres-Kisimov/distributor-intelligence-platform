@@ -772,6 +772,90 @@ function initCompare() {
   });
 }
 
+/* ------------------------------------------ scenario A/B compare (server) */
+/* Two *named* budget/guardrail scenarios compared in one server call
+   (POST /api/scenario/compare). Deterministic; routing is solved once and
+   shared, so the uplift delta is pricing + assortment. The same A/B table is
+   written to the workbook's Scenarios sheet, so screen and export agree. */
+function scGuardValue(segId) {
+  const btn = document.querySelector("#" + segId + " button.active");
+  return btn ? parseFloat(btn.dataset.mc) : 0.15;
+}
+function scBudgetEur(sliderId) {
+  const full = STATE.assort ? STATE.assort.full_capital : null;
+  if (!full) return null;
+  return Math.round((+$(sliderId).value / 100) * full);
+}
+function scScenarioDesc(s) {
+  return eur(s.budget) + " budget (" + Math.round(s.budget_pct_of_full * 100) + "%) · ±" +
+    Math.round(s.max_change * 100) + "% prices";
+}
+function scLeverDesc(s) {
+  return "pricing " + eur(s.kpis.pricing_uplift_eur) + " · routing " + eur(s.kpis.routing_uplift_eur) +
+    " · assortment " + eur(s.kpis.assortment_uplift_eur);
+}
+function renderScenarioResult(res) {
+  const a = res.scenario_a, b = res.scenario_b, d = res.deltas;
+  $("#scResAScenario").textContent = a.name + " — " + scScenarioDesc(a);
+  $("#scResAUplift").textContent = eur(a.kpis.expected_uplift_eur) + " / yr";
+  $("#scResALevers").textContent = scLeverDesc(a);
+  $("#scResBScenario").textContent = b.name + " — " + scScenarioDesc(b);
+  $("#scResBUplift").textContent = eur(b.kpis.expected_uplift_eur) + " / yr";
+  $("#scResBLevers").textContent = scLeverDesc(b);
+  const du = d.expected_uplift_eur.abs;
+  const dEl = $("#scResDelta");
+  dEl.textContent = (du >= 0 ? "+" : "−") + eur(Math.abs(du)) + " / yr";
+  dEl.classList.toggle("up", du >= 0);
+  dEl.classList.toggle("down", du < 0);
+  const sgn = (v) => (v >= 0 ? "+" : "−") + eur(Math.abs(v));
+  $("#scResDeltaLevers").textContent = "pricing " + sgn(d.pricing_uplift_eur.abs) +
+    " · assortment " + sgn(d.assortment_uplift_eur.abs);
+  $("#scResNote").textContent = res.routing_identical
+    ? "routing identical in both scenarios"
+    : "routing differs between scenarios";
+  $("#scenarioProvenance").textContent = res.provenance;
+  $("#scenarioResult").hidden = false;
+}
+async function runScenarioCompare() {
+  const btn = $("#runScenarioCompare");
+  const ba = scBudgetEur("#scABudget"), bb = scBudgetEur("#scBBudget");
+  if (ba == null || bb == null) return;
+  const body = {
+    scenario_a: { name: "A", budget: ba, max_change: scGuardValue("scAGuard") },
+    scenario_b: { name: "B", budget: bb, max_change: scGuardValue("scBGuard") },
+  };
+  btn.disabled = true;
+  btn.textContent = "Comparing…";
+  try {
+    const r = await fetch("/api/scenario/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || "compare failed");
+    renderScenarioResult(res);
+  } catch (err) {
+    $("#scenarioProvenance").textContent = "Compare failed: " + (err && err.message ? err.message : "network error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Compare A vs B";
+  }
+}
+function initScenarioCompare() {
+  $("#scABudget").addEventListener("input", () => { $("#scABudgetLabel").textContent = $("#scABudget").value + "%"; });
+  $("#scBBudget").addEventListener("input", () => { $("#scBBudgetLabel").textContent = $("#scBBudget").value + "%"; });
+  ["scAGuard", "scBGuard"].forEach((id) => {
+    $$("#" + id + " button").forEach((b) =>
+      b.addEventListener("click", () => {
+        $$("#" + id + " button").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+      })
+    );
+  });
+  $("#runScenarioCompare").addEventListener("click", runScenarioCompare);
+}
+
 /* ------------------------------------------------ import your data (Excel) */
 /* POST the filled template; on success the server has swapped every engine
    onto the imported data, so a full reload is the honest refresh (banner,
@@ -993,6 +1077,7 @@ async function boot() {
   initNav();
   initSummaryCopy();
   initCompare();
+  initScenarioCompare();
   initDrills();
   initKpiDrill();
   initCrosssell();

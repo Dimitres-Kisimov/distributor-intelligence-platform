@@ -1,0 +1,8 @@
+key,value
+data_label,"SYNTHETIC - seeded, deterministic; models no real company"
+dataset_seed,20260724
+n_skus,200
+n_months,24
+generated_by,powerbi/build_star.py
+author,"Dimitres Kisimov, 2026"
+license,All rights reserved (portfolio review)

@@ -20,6 +20,7 @@ API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
        ``/api/margin-bridge`` ``/api/abc-xyz`` ``/api/rfm`` ``/api/revenue``
        ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
        ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
+       ``/api/scenario/compare`` (POST)
        ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
@@ -52,6 +53,7 @@ from dip import (
     importer,
     optimize,
     prescribe,
+    scenario,
 )
 from dip.data import build_dataset
 
@@ -187,6 +189,32 @@ def _explain_for(budget: float | None, max_change: float, st: dict | None = None
         routes=cache["routes"],
         prices=prices,
         source=st["source"],
+    )
+
+
+def _scenario_for(budget: float | None, max_change: float, st: dict | None = None) -> dict:
+    """The A/B compare baked into a deliverable: default baseline vs on-screen.
+
+    Scenario A is the default plan (the optimiser's own 40%-of-capital budget,
+    ±15% guardrail); scenario B is the scenario the export was requested for.
+    Reuses the state's routing solve, so scenario B ties to the exact plan
+    `_plan_for` serves and to the workbook's Summary sheet.
+    """
+    st = st or STATE
+    return scenario.compare_scenarios(
+        st["ds"],
+        scenario_a={
+            "name": "Baseline (default budget & guardrail)",
+            "budget": None,
+            "max_change": DEFAULT_MAX_CHANGE,
+        },
+        scenario_b={
+            "name": "On-screen scenario",
+            "budget": budget,
+            "max_change": max_change,
+        },
+        source=st["source"],
+        routes=st["cache"]["routes"],
     )
 
 
@@ -380,6 +408,40 @@ def api_explain():
     return jsonify(_explain_for(budget, max_change))
 
 
+@app.route("/api/scenario/compare", methods=["POST"])
+def api_scenario_compare():
+    """A/B compare two named budget/guardrail scenarios over the served dataset.
+
+    Body (JSON)::
+
+        {"scenario_a": {"name"?, "budget"?, "max_change"?},
+         "scenario_b": {"name"?, "budget"?, "max_change"?}}
+
+    ``budget`` in EUR (null/omitted = the optimiser's default 40%-of-capital);
+    ``max_change`` a guardrail fraction in (0, 1] (default 0.15). Returns each
+    scenario's KPIs, the per-KPI absolute/% deltas, and a data-source provenance
+    label. 400 on a non-JSON body or invalid parameters; the compare is
+    deterministic (it reuses the state's single routing solve).
+    """
+    st = STATE
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(
+            {"error": 'POST a JSON body: {"scenario_a": {...}, "scenario_b": {...}}'}
+        ), 400
+    try:
+        result = scenario.compare_scenarios(
+            st["ds"],
+            scenario_a=payload.get("scenario_a"),
+            scenario_b=payload.get("scenario_b"),
+            source=st["source"],
+            routes=st["cache"]["routes"],
+        )
+    except scenario.ScenarioError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)
+
+
 # ---- Excel round-trip: import your data / reset ----------------------------
 @app.route("/api/import/template")
 def api_import_template():
@@ -471,6 +533,7 @@ def api_export_excel():
         ds=st["ds"],
         source=st["source"],
         explanation=_explain_for(budget, max_change, st=st),
+        scenario_compare=_scenario_for(budget, max_change, st=st),
     )
     return Response(
         data,

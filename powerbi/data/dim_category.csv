@@ -1,0 +1,9 @@
+category,n_skus,avg_elasticity,avg_unit_cost_eur,avg_unit_price_eur
+Beverages,25,-1.648,2.11,6.5
+Confectionery,25,-2.071,1.08,3.87
+Dairy,25,-1.297,1.74,4.83
+Frozen,25,-1.12,2.67,7.74
+Household,25,-0.891,3.28,10.11
+Pantry,25,-1.421,1.46,4.4
+Personal Care,25,-0.809,3.73,12.01
+Snacks,25,-1.853,1.22,4.4

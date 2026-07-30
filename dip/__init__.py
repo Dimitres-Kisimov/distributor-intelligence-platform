@@ -20,11 +20,13 @@ from .data import build_dataset
 from .forecast import forecast_revenue
 from .optimize import optimize_assortment, optimize_prices, optimize_routes
 from .prescribe import build_plan
+from .scenario import compare_scenarios
 
 __all__ = [
     "abc_xyz",
     "build_dataset",
     "build_plan",
+    "compare_scenarios",
     "forecast_revenue",
     "kpi_drilldown",
     "kpis",

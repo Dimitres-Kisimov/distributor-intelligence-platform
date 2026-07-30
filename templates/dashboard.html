@@ -28,6 +28,7 @@
     <a class="nav-item" data-target="sec-segments"><span class="dot"></span> Customer segments</a>
     <a class="nav-item" data-target="sec-crosssell"><span class="dot"></span> Cross-sell</a>
     <a class="nav-item" data-target="sec-actions"><span class="dot"></span> Recommended actions</a>
+    <a class="nav-item" data-target="sec-scenario"><span class="dot"></span> Scenario A/B</a>
     <a class="nav-item" data-target="sec-why"><span class="dot"></span> Why this plan?</a>
     <div class="nav-spacer"></div>
     <div class="nav-foot">
@@ -296,6 +297,67 @@
             <table class="drill-table" id="crossTable"></table>
           </div>
           <div class="legend"><span class="lg" id="crossNote">—</span></div>
+        </div>
+
+        <!-- Scenario compare (A vs B) — server-side POST /api/scenario/compare.
+             Two named budget/guardrail scenarios compared in one deterministic
+             call; the same A/B table is written to the workbook's Scenarios sheet. -->
+        <div class="card col-12" id="sec-scenario">
+          <div class="card-head">
+            <div class="card-title">Scenario compare (A vs B) <span class="info" title="Runs the optimiser under two named budget / price-guardrail scenarios server-side (POST /api/scenario/compare) over the same dataset, and shows each scenario's KPIs with the absolute and % deltas. Deterministic; routing is solved once and shared across both scenarios, so the uplift delta is driven by pricing and assortment. The same A/B table is exported to the workbook's Scenarios sheet.">?</span></div>
+            <button class="btn primary" id="runScenarioCompare" type="button" title="Run the A/B compare on the server for the two scenarios below">Compare A vs B</button>
+          </div>
+          <div class="scenario-form">
+            <div class="sc-side">
+              <div class="sc-tag">Scenario A</div>
+              <div class="sc-ctrl">
+                <div class="sc-row"><span>Working-capital budget</span><span id="scABudgetLabel">40%</span></div>
+                <input type="range" id="scABudget" min="15" max="100" value="40" step="1" />
+              </div>
+              <div class="sc-row"><span>Price guardrail</span>
+                <div class="seg" id="scAGuard">
+                  <button data-mc="0.05">±5%</button>
+                  <button data-mc="0.1">±10%</button>
+                  <button class="active" data-mc="0.15">±15%</button>
+                </div>
+              </div>
+            </div>
+            <div class="sc-side">
+              <div class="sc-tag">Scenario B</div>
+              <div class="sc-ctrl">
+                <div class="sc-row"><span>Working-capital budget</span><span id="scBBudgetLabel">70%</span></div>
+                <input type="range" id="scBBudget" min="15" max="100" value="70" step="1" />
+              </div>
+              <div class="sc-row"><span>Price guardrail</span>
+                <div class="seg" id="scBGuard">
+                  <button data-mc="0.05">±5%</button>
+                  <button class="active" data-mc="0.1">±10%</button>
+                  <button data-mc="0.15">±15%</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <section class="compare" id="scenarioResult" hidden>
+            <div class="cmp-col">
+              <div class="cmp-tag">Scenario A</div>
+              <div class="cmp-scenario" id="scResAScenario">—</div>
+              <div class="cmp-uplift" id="scResAUplift">—</div>
+              <div class="cmp-levers" id="scResALevers">—</div>
+            </div>
+            <div class="cmp-col">
+              <div class="cmp-tag">Scenario B</div>
+              <div class="cmp-scenario" id="scResBScenario">—</div>
+              <div class="cmp-uplift" id="scResBUplift">—</div>
+              <div class="cmp-levers" id="scResBLevers">—</div>
+            </div>
+            <div class="cmp-col cmp-delta">
+              <div class="cmp-tag">&Delta; uplift (B &minus; A, modelled)</div>
+              <div class="cmp-uplift" id="scResDelta">—</div>
+              <div class="cmp-levers" id="scResDeltaLevers">—</div>
+              <div class="cmp-note" id="scResNote">routing identical in both scenarios</div>
+            </div>
+          </section>
+          <div class="legend"><span class="lg" id="scenarioProvenance">Set two scenarios and click Compare &mdash; results are computed server-side and are deterministic.</span></div>
         </div>
 
         <!-- Why this plan? — plain-language explanation from /api/explain -->

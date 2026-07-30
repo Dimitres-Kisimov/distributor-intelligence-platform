@@ -1,0 +1,201 @@
+sku,name,category,region,channel,unit_cost_eur,unit_price_eur,unit_margin_eur,elasticity,lead_time_days,shelf_space,carried_in_plan,recommended_price_eur,price_change_pct,pricing_profit_delta_eur
+SKU-0001,BEV 663-A,Beverages,North,Retail,1.78,5.4,3.62,-1.769,19,0.91,0,4.59,-0.15,161.29
+SKU-0002,SNA 714-B,Snacks,North,Wholesale,1.41,3.75,2.34,-2.017,20,1.63,0,3.19,-0.15,317.18
+SKU-0003,DAI 967-C,Dairy,North,Wholesale,1.55,4.4,2.85,-1.553,19,2.67,0,4.35,-0.0107,0.13
+SKU-0004,FRO 816-D,Frozen,East,Retail,2.33,8.44,6.11,-0.881,18,1.95,0,9.71,0.15,364.9
+SKU-0005,HOU 859-E,Household,North,Wholesale,3.3,11.04,7.74,-1.005,9,0.62,1,12.7,0.15,1134.02
+SKU-0006,PER 354-F,Personal Care,East,Wholesale,3.17,9.04,5.87,-0.948,11,1.79,0,10.4,0.15,440.39
+SKU-0007,CON 914-G,Confectionery,North,Retail,1.18,3.9,2.72,-2.453,11,2.5,1,3.31,-0.15,841.56
+SKU-0008,PAN 525-H,Pantry,North,Wholesale,1.54,4.98,3.44,-1.557,11,2.19,1,4.3,-0.1356,29.87
+SKU-0009,BEV 760-I,Beverages,East,Retail,2.48,7.61,5.13,-1.752,15,1.59,0,6.47,-0.15,108.37
+SKU-0010,SNA 508-J,Snacks,South,Wholesale,1.23,3.54,2.31,-1.582,17,0.51,0,3.34,-0.0555,9.77
+SKU-0011,DAI 817-K,Dairy,North,Retail,2.0,5.5,3.5,-1.271,15,0.42,0,6.32,0.15,76.29
+SKU-0012,FRO 551-L,Frozen,South,Retail,3.03,9.41,6.38,-1.212,3,0.59,1,10.82,0.15,331.18
+SKU-0013,HOU 149-M,Household,South,Retail,4.03,12.02,7.99,-0.856,11,2.74,0,13.82,0.15,610.45
+SKU-0014,PER 974-N,Personal Care,West,Wholesale,3.14,12.81,9.67,-0.914,3,2.82,1,14.73,0.15,1263.36
+SKU-0015,CON 121-O,Confectionery,West,Retail,1.36,4.19,2.83,-1.83,13,1.51,0,3.56,-0.15,92.16
+SKU-0016,PAN 519-P,Pantry,Central,Retail,1.23,4.19,2.96,-1.673,11,1.68,1,3.56,-0.15,171.07
+SKU-0017,BEV 986-Q,Beverages,Central,Online,2.77,6.73,3.96,-1.799,4,0.68,1,6.24,-0.0733,47.22
+SKU-0018,SNA 157-R,Snacks,North,Retail,1.21,5.12,3.91,-2.091,6,0.53,1,4.35,-0.15,534.2
+SKU-0019,DAI 364-S,Dairy,North,Wholesale,1.87,4.82,2.95,-1.369,11,0.52,0,5.54,0.15,108.15
+SKU-0020,FRO 446-T,Frozen,North,Wholesale,2.05,8.75,6.7,-1.184,5,1.5,1,10.06,0.15,64.83
+SKU-0021,HOU 627-U,Household,North,Retail,2.87,10.73,7.86,-0.759,9,1.25,1,12.34,0.15,1077.59
+SKU-0022,PER 135-V,Personal Care,Central,Wholesale,3.67,12.45,8.78,-0.884,15,1.14,0,14.32,0.15,396.92
+SKU-0023,CON 537-W,Confectionery,South,Online,0.83,4.76,3.93,-1.801,11,2.8,1,4.05,-0.15,641.75
+SKU-0024,PAN 648-X,Pantry,South,Retail,1.36,4.66,3.3,-1.198,9,2.07,1,5.36,0.15,71.26
+SKU-0025,BEV 980-Y,Beverages,East,Online,2.53,6.66,4.13,-1.834,9,1.04,0,5.66,-0.15,49.65
+SKU-0026,SNA 180-Z,Snacks,North,Wholesale,1.67,4.77,3.1,-2.143,5,2.28,1,4.05,-0.15,187.78
+SKU-0027,DAI 823-A,Dairy,South,Retail,2.11,5.25,3.14,-1.471,8,3.0,0,6.04,0.15,102.78
+SKU-0028,FRO 507-B,Frozen,North,Wholesale,2.53,8.36,5.83,-1.006,15,1.43,0,9.61,0.15,247.53
+SKU-0029,HOU 964-C,Household,West,Wholesale,4.17,11.48,7.31,-1.003,20,2.95,0,13.2,0.15,2075.33
+SKU-0030,PER 348-D,Personal Care,East,Wholesale,3.95,12.72,8.77,-0.734,8,2.8,1,14.63,0.15,1175.53
+SKU-0031,CON 799-E,Confectionery,Central,Wholesale,1.37,3.91,2.54,-1.71,19,0.59,0,3.32,-0.15,128.28
+SKU-0032,PAN 726-F,Pantry,West,Online,1.53,4.57,3.04,-1.368,15,1.8,0,5.26,0.15,36.25
+SKU-0033,BEV 217-G,Beverages,South,Retail,2.21,7.78,5.57,-1.853,14,2.15,1,6.61,-0.15,564.45
+SKU-0034,SNA 133-H,Snacks,Central,Wholesale,0.92,5.32,4.4,-1.522,9,2.57,1,4.52,-0.15,461.26
+SKU-0035,DAI 862-I,Dairy,East,Wholesale,1.95,5.88,3.93,-1.127,14,1.99,0,6.76,0.15,346.57
+SKU-0036,FRO 726-J,Frozen,West,Wholesale,2.43,5.65,3.22,-1.138,4,1.28,1,6.5,0.15,306.15
+SKU-0037,HOU 494-K,Household,Central,Online,2.73,9.71,6.98,-0.72,10,1.5,1,11.17,0.15,736.59
+SKU-0038,PER 148-L,Personal Care,North,Wholesale,3.29,14.48,11.19,-0.667,4,2.34,1,16.65,0.15,2111.96
+SKU-0039,CON 995-M,Confectionery,West,Wholesale,1.17,4.66,3.49,-2.299,15,0.6,1,3.96,-0.15,373.79
+SKU-0040,PAN 291-N,Pantry,West,Wholesale,1.76,5.19,3.43,-1.274,18,1.3,0,5.97,0.15,156.78
+SKU-0041,BEV 129-O,Beverages,North,Wholesale,1.93,5.95,4.02,-1.333,6,2.53,1,6.84,0.15,39.25
+SKU-0042,SNA 419-P,Snacks,North,Online,0.9,4.36,3.46,-1.525,18,2.09,1,3.71,-0.15,788.85
+SKU-0043,DAI 233-Q,Dairy,Central,Online,1.27,4.76,3.49,-1.048,6,2.09,1,5.47,0.15,121.84
+SKU-0044,FRO 620-R,Frozen,East,Wholesale,2.37,8.93,6.56,-1.096,8,1.92,1,10.27,0.15,612.01
+SKU-0045,HOU 799-S,Household,West,Online,2.68,7.05,4.37,-0.777,14,1.53,0,8.11,0.15,677.21
+SKU-0046,PER 330-T,Personal Care,South,Wholesale,3.88,11.66,7.78,-0.654,6,0.8,1,13.41,0.15,1657.63
+SKU-0047,CON 301-U,Confectionery,North,Wholesale,0.78,4.02,3.24,-2.047,5,0.97,1,3.42,-0.15,433.96
+SKU-0048,PAN 790-V,Pantry,North,Wholesale,1.18,3.75,2.57,-1.622,5,2.04,1,3.19,-0.15,107.15
+SKU-0049,BEV 231-W,Beverages,Central,Wholesale,2.44,7.56,5.12,-1.345,7,2.33,1,8.69,0.15,141.43
+SKU-0050,SNA 322-X,Snacks,South,Wholesale,0.98,3.57,2.59,-2.098,15,0.82,1,3.03,-0.15,177.04
+SKU-0051,DAI 320-Y,Dairy,Central,Retail,1.61,4.09,2.48,-1.339,5,2.06,1,4.7,0.15,64.86
+SKU-0052,FRO 565-Z,Frozen,Central,Retail,3.11,9.86,6.75,-0.938,4,1.06,1,11.34,0.15,1583.47
+SKU-0053,HOU 857-A,Household,Central,Wholesale,2.53,10.27,7.74,-0.97,18,0.44,1,11.81,0.15,306.99
+SKU-0054,PER 699-B,Personal Care,Central,Online,4.87,14.1,9.23,-0.667,6,2.3,1,16.21,0.15,3072.91
+SKU-0055,CON 357-C,Confectionery,East,Retail,1.07,3.14,2.07,-1.905,17,2.37,0,2.67,-0.15,160.59
+SKU-0056,PAN 104-D,Pantry,East,Wholesale,1.14,2.87,1.73,-1.379,12,0.74,0,3.3,0.15,65.6
+SKU-0057,BEV 979-E,Beverages,North,Wholesale,1.83,7.02,5.19,-1.382,13,1.48,1,6.62,-0.0569,4.83
+SKU-0058,SNA 970-F,Snacks,West,Retail,0.96,3.95,2.99,-1.8,17,2.58,1,3.36,-0.15,367.19
+SKU-0059,DAI 415-G,Dairy,South,Retail,1.47,4.56,3.09,-1.112,20,1.75,0,5.24,0.15,329.06
+SKU-0060,FRO 530-H,Frozen,North,Retail,2.32,7.06,4.74,-0.994,13,1.63,0,8.12,0.15,556.73
+SKU-0061,HOU 629-I,Household,Central,Wholesale,2.81,8.49,5.68,-0.753,12,0.92,1,9.76,0.15,684.95
+SKU-0062,PER 570-J,Personal Care,West,Retail,4.78,11.59,6.81,-0.935,3,2.62,0,13.33,0.15,284.55
+SKU-0063,CON 919-K,Confectionery,Central,Retail,0.77,4.76,3.99,-2.034,14,1.72,1,4.05,-0.15,458.46
+SKU-0064,PAN 485-L,Pantry,North,Retail,1.47,4.5,3.03,-1.423,13,2.84,0,4.95,0.0989,7.4
+SKU-0065,BEV 676-M,Beverages,Central,Retail,1.59,7.43,5.84,-1.844,9,2.62,1,6.32,-0.15,1273.38
+SKU-0066,SNA 478-N,Snacks,South,Retail,1.45,3.62,2.17,-1.77,16,0.6,0,3.33,-0.0792,13.24
+SKU-0067,DAI 779-O,Dairy,Central,Wholesale,2.05,5.55,3.5,-1.537,6,2.03,1,5.87,0.0572,11.51
+SKU-0068,FRO 450-P,Frozen,East,Wholesale,2.0,6.33,4.33,-1.042,9,2.44,1,7.28,0.15,263.11
+SKU-0069,HOU 299-Q,Household,South,Wholesale,3.79,9.74,5.95,-0.879,19,2.54,0,11.2,0.15,1817.84
+SKU-0070,PER 137-R,Personal Care,Central,Wholesale,3.42,10.52,7.1,-0.717,3,2.36,1,12.1,0.15,966.39
+SKU-0071,CON 401-S,Confectionery,South,Online,1.37,3.13,1.76,-1.891,19,2.62,0,2.91,-0.0711,12.05
+SKU-0072,PAN 717-T,Pantry,Central,Retail,1.65,4.92,3.27,-1.289,3,1.36,1,5.66,0.15,93.44
+SKU-0073,BEV 981-U,Beverages,South,Retail,1.83,7.31,5.48,-1.813,7,1.69,1,6.21,-0.15,687.59
+SKU-0074,SNA 118-V,Snacks,North,Wholesale,1.21,5.35,4.14,-1.902,12,1.19,1,4.55,-0.15,1476.65
+SKU-0075,DAI 915-W,Dairy,South,Wholesale,1.52,4.67,3.15,-1.466,8,2.36,1,4.78,0.0239,1.64
+SKU-0076,FRO 324-X,Frozen,North,Wholesale,3.14,9.58,6.44,-1.232,18,2.09,0,11.02,0.15,79.32
+SKU-0077,HOU 770-Y,Household,North,Online,3.23,7.81,4.58,-1.077,14,0.7,0,8.98,0.15,297.01
+SKU-0078,PER 998-Z,Personal Care,Central,Online,3.22,9.9,6.68,-0.803,4,2.96,0,11.38,0.15,259.64
+SKU-0079,CON 750-A,Confectionery,East,Retail,1.16,3.81,2.65,-2.214,15,0.85,1,3.24,-0.15,830.91
+SKU-0080,PAN 756-B,Pantry,East,Wholesale,1.15,4.55,3.4,-1.18,8,1.2,1,5.23,0.15,195.28
+SKU-0081,BEV 816-C,Beverages,Central,Retail,2.1,6.11,4.01,-1.39,6,2.58,1,7.03,0.15,188.07
+SKU-0082,SNA 585-D,Snacks,East,Retail,1.13,3.65,2.52,-1.985,6,1.27,1,3.1,-0.15,529.07
+SKU-0083,DAI 628-E,Dairy,West,Retail,1.96,4.84,2.88,-1.213,20,0.46,0,5.57,0.15,257.31
+SKU-0084,FRO 588-F,Frozen,Central,Retail,3.23,7.09,3.86,-0.909,6,2.9,0,8.15,0.15,365.65
+SKU-0085,HOU 277-G,Household,North,Retail,2.29,9.07,6.78,-1.015,7,0.51,1,10.43,0.15,304.54
+SKU-0086,PER 997-H,Personal Care,West,Wholesale,2.76,14.16,11.4,-0.957,11,1.84,1,16.28,0.15,1080.15
+SKU-0087,CON 617-I,Confectionery,South,Online,1.17,3.71,2.54,-2.342,8,0.66,1,3.15,-0.15,1230.16
+SKU-0088,PAN 182-J,Pantry,East,Retail,1.47,4.02,2.55,-1.271,11,0.98,1,4.62,0.15,146.72
+SKU-0089,BEV 246-K,Beverages,West,Retail,2.28,6.89,4.61,-1.677,9,1.4,1,5.86,-0.15,192.88
+SKU-0090,SNA 517-L,Snacks,Central,Wholesale,1.38,3.88,2.5,-1.656,8,2.82,0,3.48,-0.1021,18.35
+SKU-0091,DAI 138-M,Dairy,North,Retail,1.71,4.74,3.03,-1.138,19,1.17,0,5.45,0.15,224.56
+SKU-0092,FRO 967-N,Frozen,North,Wholesale,2.81,6.1,3.29,-1.163,3,1.43,1,7.01,0.15,285.75
+SKU-0093,HOU 711-O,Household,South,Wholesale,3.12,10.64,7.52,-0.736,10,2.44,1,12.24,0.15,772.29
+SKU-0094,PER 693-P,Personal Care,East,Wholesale,2.71,14.08,11.37,-0.804,6,0.87,1,16.19,0.15,1360.03
+SKU-0095,CON 736-Q,Confectionery,North,Retail,1.15,4.44,3.29,-1.914,6,1.29,1,3.77,-0.15,141.28
+SKU-0096,PAN 474-R,Pantry,East,Retail,1.38,4.13,2.75,-1.643,5,2.88,1,3.53,-0.1462,114.58
+SKU-0097,BEV 490-S,Beverages,South,Online,1.62,7.0,5.38,-1.885,20,1.48,1,5.95,-0.15,1226.16
+SKU-0098,SNA 687-T,Snacks,Central,Online,0.95,5.83,4.88,-1.655,18,1.77,1,4.96,-0.15,1011.19
+SKU-0099,DAI 677-U,Dairy,East,Wholesale,1.78,5.4,3.62,-1.317,14,1.83,0,6.21,0.15,31.78
+SKU-0100,FRO 776-V,Frozen,North,Retail,2.33,6.0,3.67,-1.312,17,1.64,0,6.9,0.15,218.62
+SKU-0101,HOU 435-W,Household,North,Retail,2.76,7.98,5.22,-0.738,18,2.84,0,9.18,0.15,249.52
+SKU-0102,PER 407-X,Personal Care,North,Retail,4.35,14.01,9.66,-0.899,15,1.7,0,16.11,0.15,1177.81
+SKU-0103,CON 958-Y,Confectionery,Central,Online,0.85,2.85,2.0,-2.189,9,1.04,1,2.42,-0.15,289.13
+SKU-0104,PAN 419-Z,Pantry,North,Wholesale,1.36,3.4,2.04,-1.448,19,3.0,0,3.91,0.15,67.66
+SKU-0105,BEV 502-A,Beverages,Central,Wholesale,2.77,6.91,4.14,-1.715,9,1.04,1,6.64,-0.0385,7.78
+SKU-0106,SNA 516-B,Snacks,North,Retail,1.29,4.87,3.58,-1.895,6,2.45,1,4.14,-0.15,423.71
+SKU-0107,DAI 291-C,Dairy,North,Retail,1.62,3.19,1.57,-1.322,16,2.31,0,3.67,0.15,208.95
+SKU-0108,FRO 312-D,Frozen,Central,Online,2.48,6.71,4.23,-1.265,4,1.2,1,7.72,0.15,347.16
+SKU-0109,HOU 933-E,Household,South,Wholesale,3.83,12.16,8.33,-1.026,12,0.54,1,13.98,0.15,686.16
+SKU-0110,PER 435-F,Personal Care,South,Retail,3.77,9.39,5.62,-0.82,4,2.05,1,10.8,0.15,1172.39
+SKU-0111,CON 788-G,Confectionery,West,Retail,1.32,4.51,3.19,-1.841,18,2.71,0,3.83,-0.15,160.92
+SKU-0112,PAN 425-H,Pantry,East,Wholesale,1.69,4.2,2.51,-1.447,15,2.36,0,4.83,0.15,97.81
+SKU-0113,BEV 818-I,Beverages,West,Wholesale,1.68,7.22,5.54,-1.373,15,2.56,1,6.18,-0.1435,52.82
+SKU-0114,SNA 961-J,Snacks,North,Online,1.33,3.69,2.36,-2.02,8,0.53,1,3.14,-0.15,361.71
+SKU-0115,DAI 925-K,Dairy,West,Wholesale,1.94,5.21,3.27,-1.112,13,1.71,0,5.99,0.15,391.26
+SKU-0116,FRO 596-L,Frozen,Central,Online,3.16,8.95,5.79,-1.074,16,0.58,0,10.29,0.15,120.81
+SKU-0117,HOU 382-M,Household,Central,Wholesale,2.38,11.99,9.61,-0.852,3,2.26,1,13.79,0.15,740.0
+SKU-0118,PER 756-N,Personal Care,North,Retail,2.91,9.81,6.9,-0.808,14,2.8,0,11.28,0.15,1259.29
+SKU-0119,CON 126-O,Confectionery,North,Wholesale,1.06,4.72,3.66,-1.739,13,2.54,1,4.01,-0.15,334.71
+SKU-0120,PAN 831-P,Pantry,East,Online,1.84,5.69,3.85,-1.504,16,0.87,0,5.49,-0.035,3.39
+SKU-0121,BEV 112-Q,Beverages,West,Retail,2.54,5.54,3.0,-1.285,18,1.99,0,6.37,0.15,470.85
+SKU-0122,SNA 356-R,Snacks,Central,Online,1.65,5.74,4.09,-1.608,19,1.34,0,4.88,-0.15,109.03
+SKU-0123,DAI 649-S,Dairy,East,Wholesale,1.67,4.7,3.03,-1.327,11,1.45,0,5.4,0.15,75.93
+SKU-0124,FRO 214-T,Frozen,Central,Retail,2.93,7.16,4.23,-0.956,19,2.47,0,8.23,0.15,879.06
+SKU-0125,HOU 878-U,Household,North,Retail,3.68,9.25,5.57,-0.879,4,1.49,1,10.64,0.15,561.26
+SKU-0126,PER 597-V,Personal Care,West,Wholesale,3.78,10.9,7.12,-0.871,18,0.56,0,12.54,0.15,1358.08
+SKU-0127,CON 337-W,Confectionery,Central,Wholesale,0.96,3.23,2.27,-2.112,13,1.31,1,2.75,-0.15,659.51
+SKU-0128,PAN 704-X,Pantry,North,Retail,1.72,3.59,1.87,-1.42,19,0.93,0,4.13,0.15,280.09
+SKU-0129,BEV 177-Y,Beverages,West,Wholesale,1.77,4.85,3.08,-1.701,3,2.22,1,4.29,-0.1144,27.32
+SKU-0130,SNA 673-Z,Snacks,West,Retail,0.99,4.12,3.13,-1.934,14,1.09,1,3.5,-0.15,1006.85
+SKU-0131,DAI 207-A,Dairy,West,Retail,1.93,4.47,2.54,-1.211,18,1.91,0,5.14,0.15,388.79
+SKU-0132,FRO 525-B,Frozen,West,Wholesale,2.9,6.24,3.34,-1.197,3,2.79,0,7.18,0.15,216.61
+SKU-0133,HOU 384-C,Household,West,Retail,3.99,11.54,7.55,-0.932,19,2.03,0,13.27,0.15,484.69
+SKU-0134,PER 107-D,Personal Care,South,Wholesale,2.69,10.46,7.77,-0.693,11,1.09,1,12.03,0.15,2041.79
+SKU-0135,CON 627-E,Confectionery,North,Wholesale,1.39,4.62,3.23,-2.043,7,2.97,0,3.93,-0.15,142.13
+SKU-0136,PAN 294-F,Pantry,South,Retail,1.05,3.87,2.82,-1.292,13,2.77,0,4.45,0.15,10.19
+SKU-0137,BEV 983-G,Beverages,East,Wholesale,1.81,5.92,4.11,-1.757,7,1.99,1,5.03,-0.15,366.04
+SKU-0138,SNA 872-H,Snacks,Central,Online,1.17,5.5,4.33,-1.79,6,1.55,1,4.67,-0.15,257.64
+SKU-0139,DAI 177-I,Dairy,West,Online,1.42,4.71,3.29,-1.077,7,0.77,1,5.42,0.15,161.81
+SKU-0140,FRO 446-J,Frozen,East,Retail,1.91,5.63,3.72,-1.122,13,1.27,0,6.47,0.15,422.23
+SKU-0141,HOU 694-K,Household,North,Online,3.76,9.89,6.13,-0.955,3,2.8,1,11.37,0.15,404.26
+SKU-0142,PER 150-L,Personal Care,North,Online,4.14,10.46,6.32,-0.665,20,1.87,0,12.03,0.15,1661.89
+SKU-0143,CON 129-M,Confectionery,West,Online,1.12,4.83,3.71,-2.156,5,2.83,1,4.11,-0.15,764.53
+SKU-0144,PAN 852-N,Pantry,Central,Retail,1.6,4.86,3.26,-1.169,5,2.14,1,5.59,0.15,150.51
+SKU-0145,BEV 508-O,Beverages,North,Retail,2.0,6.16,4.16,-1.768,5,2.34,1,5.24,-0.15,260.44
+SKU-0146,SNA 834-P,Snacks,North,Online,0.97,4.7,3.73,-1.732,11,1.85,1,4.0,-0.15,402.91
+SKU-0147,DAI 921-Q,Dairy,East,Retail,2.22,5.05,2.83,-1.178,17,0.53,0,5.81,0.15,268.27
+SKU-0148,FRO 413-R,Frozen,West,Retail,2.67,7.33,4.66,-0.991,8,0.71,1,8.43,0.15,130.2
+SKU-0149,HOU 442-S,Household,West,Wholesale,2.73,8.04,5.31,-0.853,12,2.32,0,9.25,0.15,1469.42
+SKU-0150,PER 121-T,Personal Care,South,Online,4.34,11.98,7.64,-0.7,20,2.42,0,13.78,0.15,1181.34
+SKU-0151,CON 105-U,Confectionery,North,Retail,1.09,3.28,2.19,-2.407,10,2.39,1,2.79,-0.15,1143.62
+SKU-0152,PAN 631-V,Pantry,West,Wholesale,1.22,3.44,2.22,-1.176,17,1.9,0,3.96,0.15,53.86
+SKU-0153,BEV 629-W,Beverages,North,Retail,1.93,6.19,4.26,-1.919,17,2.32,0,5.26,-0.15,495.12
+SKU-0154,SNA 122-X,Snacks,East,Wholesale,1.3,3.29,1.99,-2.057,11,1.47,0,2.8,-0.15,186.43
+SKU-0155,DAI 317-Y,Dairy,North,Online,1.63,3.63,2.0,-1.404,18,2.78,0,4.17,0.15,82.13
+SKU-0156,FRO 416-Z,Frozen,South,Retail,3.08,7.71,4.63,-1.309,8,2.0,0,8.87,0.15,209.86
+SKU-0157,HOU 822-A,Household,West,Wholesale,3.97,11.6,7.63,-1.0,3,1.8,1,13.34,0.15,608.96
+SKU-0158,PER 385-B,Personal Care,West,Online,4.17,11.86,7.69,-0.824,11,0.41,1,13.64,0.15,3556.38
+SKU-0159,CON 560-C,Confectionery,West,Retail,0.83,3.19,2.36,-2.368,8,2.29,1,2.71,-0.15,665.25
+SKU-0160,PAN 774-D,Pantry,Central,Wholesale,1.9,5.68,3.78,-1.673,3,1.26,1,4.83,-0.15,81.68
+SKU-0161,BEV 853-E,Beverages,North,Retail,2.53,6.08,3.55,-1.684,6,2.8,1,6.23,0.0245,2.85
+SKU-0162,SNA 138-F,Snacks,West,Wholesale,1.49,4.27,2.78,-1.765,15,1.81,0,3.63,-0.15,125.83
+SKU-0163,DAI 400-G,Dairy,North,Retail,1.5,5.06,3.56,-1.47,6,0.53,1,4.69,-0.0728,7.23
+SKU-0164,FRO 382-H,Frozen,Central,Online,3.3,8.89,5.59,-1.208,6,0.99,1,10.22,0.15,437.98
+SKU-0165,HOU 666-I,Household,North,Retail,3.49,11.12,7.63,-0.916,11,1.32,1,12.79,0.15,622.51
+SKU-0166,PER 523-J,Personal Care,Central,Wholesale,4.85,13.78,8.93,-0.902,17,1.43,0,15.85,0.15,898.12
+SKU-0167,CON 770-K,Confectionery,East,Retail,1.31,3.88,2.57,-2.41,3,2.81,1,3.3,-0.15,216.9
+SKU-0168,PAN 811-L,Pantry,South,Online,1.06,3.29,2.23,-1.663,5,2.38,1,2.8,-0.15,50.57
+SKU-0169,BEV 653-M,Beverages,East,Retail,1.53,5.31,3.78,-1.838,19,0.55,0,4.51,-0.15,166.77
+SKU-0170,SNA 831-N,Snacks,East,Wholesale,1.27,4.8,3.53,-2.184,10,2.73,1,4.08,-0.15,1009.84
+SKU-0171,DAI 276-O,Dairy,North,Wholesale,1.58,5.11,3.53,-1.366,5,2.3,1,5.88,0.15,8.5
+SKU-0172,FRO 290-P,Frozen,West,Online,2.83,7.6,4.77,-1.241,15,2.99,0,8.74,0.15,338.71
+SKU-0173,HOU 823-Q,Household,South,Retail,4.08,11.43,7.35,-0.852,18,1.89,0,13.14,0.15,684.93
+SKU-0174,PER 627-R,Personal Care,North,Retail,4.5,11.05,6.55,-0.789,13,1.98,0,12.71,0.15,1746.5
+SKU-0175,CON 479-S,Confectionery,East,Retail,0.86,2.89,2.03,-2.016,18,2.0,0,2.46,-0.15,105.7
+SKU-0176,PAN 876-T,Pantry,South,Wholesale,1.53,4.77,3.24,-1.438,9,1.56,1,5.02,0.0531,6.98
+SKU-0177,BEV 518-U,Beverages,West,Wholesale,1.68,4.88,3.2,-1.515,18,2.54,0,4.94,0.0127,0.29
+SKU-0178,SNA 837-V,Snacks,West,Retail,1.15,4.48,3.33,-1.539,16,0.51,1,3.81,-0.15,302.02
+SKU-0179,DAI 628-W,Dairy,North,Wholesale,2.09,6.05,3.96,-1.298,5,1.67,1,6.96,0.15,103.86
+SKU-0180,FRO 954-X,Frozen,North,Online,2.37,8.4,6.03,-1.271,11,1.73,1,9.66,0.15,138.25
+SKU-0181,HOU 643-Y,Household,North,Retail,3.67,11.5,7.83,-0.83,19,1.38,0,13.22,0.15,1515.16
+SKU-0182,PER 430-Z,Personal Care,North,Wholesale,3.57,10.61,7.04,-0.808,9,2.5,1,12.2,0.15,677.56
+SKU-0183,CON 404-A,Confectionery,Central,Wholesale,0.83,3.33,2.5,-1.935,19,2.84,0,2.83,-0.15,313.32
+SKU-0184,PAN 580-B,Pantry,Central,Online,1.89,5.97,4.08,-1.636,7,0.76,1,5.07,-0.15,54.04
+SKU-0185,BEV 742-C,Beverages,South,Retail,2.27,6.79,4.52,-1.378,15,1.8,0,7.81,0.15,18.7
+SKU-0186,SNA 760-D,Snacks,North,Wholesale,1.12,3.96,2.84,-2.026,15,2.73,0,3.37,-0.15,451.8
+SKU-0187,DAI 721-E,Dairy,Central,Retail,1.38,4.37,2.99,-1.224,19,0.82,0,5.03,0.15,223.18
+SKU-0188,FRO 612-F,Frozen,East,Wholesale,3.27,9.96,6.69,-1.259,3,2.65,1,11.45,0.15,175.33
+SKU-0189,HOU 406-G,Household,West,Retail,3.31,9.18,5.87,-0.974,18,0.48,0,10.56,0.15,1727.42
+SKU-0190,PER 411-H,Personal Care,Central,Retail,2.9,13.53,10.63,-0.947,17,0.53,1,15.56,0.15,183.31
+SKU-0191,CON 412-I,Confectionery,East,Online,0.83,3.18,2.35,-2.422,18,2.33,0,2.7,-0.15,351.03
+SKU-0192,PAN 481-J,Pantry,East,Wholesale,1.13,3.37,2.24,-1.244,18,0.97,0,3.88,0.15,170.69
+SKU-0193,BEV 635-K,Beverages,South,Retail,2.8,7.12,4.32,-1.599,20,0.48,0,7.47,0.0498,7.84
+SKU-0194,SNA 493-L,Snacks,East,Retail,1.47,3.88,2.41,-2.036,12,1.02,0,3.3,-0.15,48.74
+SKU-0195,DAI 975-M,Dairy,Central,Wholesale,1.72,4.69,2.97,-1.465,10,1.14,1,5.39,0.15,90.31
+SKU-0196,FRO 695-N,Frozen,North,Retail,2.27,7.48,5.21,-1.001,17,2.18,0,8.6,0.15,279.61
+SKU-0197,HOU 313-O,Household,Central,Retail,2.71,9.05,6.34,-0.91,20,0.75,0,10.41,0.15,277.65
+SKU-0198,PER 388-P,Personal Care,South,Retail,4.37,15.0,10.63,-0.815,17,1.4,0,17.25,0.15,1432.84
+SKU-0199,CON 503-Q,Confectionery,East,Wholesale,1.27,3.72,2.45,-1.704,13,0.67,0,3.16,-0.15,121.51
+SKU-0200,PAN 192-R,Pantry,South,Retail,1.76,5.58,3.82,-1.547,4,0.88,1,4.98,-0.108,28.38
