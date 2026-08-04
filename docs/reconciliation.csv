@@ -1,0 +1,22 @@
+metric,value,source_engine_field,readme_display,in_readme
+Revenue (24 mo),4788971.2,analytics.kpis.revenue,"EUR 4,788,971",yes
+Gross margin,3257507.06,analytics.kpis.gross_margin,"EUR 3,257,507",yes
+Gross margin %,0.6802,analytics.kpis.gross_margin_pct,68.0%,yes
+YoY revenue growth,0.0987,analytics.kpis.yoy,+9.9%,yes
+OTIF service (modelled),0.8573,analytics.kpis.otif,85.7%,yes
+Forecast accuracy,0.3757,forecast.forecast_revenue.mase,MASE 0.38,yes
+Next-month revenue,204617.83,forecast.forecast_revenue.next_month_revenue,"EUR 204,618",yes
+Assortment MILP margin,935526.53,optimize.optimize_assortment.milp.margin,"EUR 935,527",yes
+Assortment greedy margin,934502.87,optimize.optimize_assortment.greedy.margin,"EUR 934,503",yes
+Assortment uplift vs greedy,1023.66,optimize.optimize_assortment.uplift_vs_greedy,"+EUR 1,024",yes
+Assortment SKUs carried,108,optimize.optimize_assortment.milp.count,108 SKUs,yes
+Assortment budget,10557.54,optimize.optimize_assortment.budget,"EUR 10,558",yes
+Pricing uplift,95609.42,optimize.optimize_prices.uplift,"+EUR 95,609",yes
+Pricing uplift %,0.064,optimize.optimize_prices.uplift_pct,+6.4%,yes
+Routing optimised km,420.08,optimize.optimize_routes.optimized_km,420 km,yes
+Routing baseline km,560.39,optimize.optimize_routes.baseline_km,560 km,yes
+Routing km saved,140.31,optimize.optimize_routes.km_saved,140 km,yes
+Routing % saved,0.2504,optimize.optimize_routes.pct_saved,25.0%,yes
+Routing vehicles used,6,optimize.optimize_routes.n_vehicles_used,6 vehicles,yes
+Expected annual uplift,136972.2,prescribe.build_plan.expected_uplift_eur,"EUR 136,972",yes
+Uplift % of annual gross margin,0.0841,prescribe.build_plan.expected_uplift_pct,8.4%,yes

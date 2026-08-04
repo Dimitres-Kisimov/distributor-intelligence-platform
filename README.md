@@ -249,6 +249,36 @@ build and pinned by a test. No Power BI licence or tenant is needed to *produce*
 the pack; it ships the star + DAX + build spec so the modelling is fully
 reproducible in Power BI Desktop.
 
+## Numbers reconciliation (no silent drift)
+
+Every headline figure this README quotes — the annual uplift, the forecast
+MASE, the routing saving, revenue, gross margin — is machine-checked back to
+the engine field it comes from. `python -m dip --reconcile` re-runs the
+engines and writes [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) (a
+plain-language ledger) and `docs/reconciliation.csv` (one row per headline
+number → the exact `engine.function.field` it traces to, plus the string the
+README prints for it). It checks two things, both enforced by
+`tests/test_reconcile.py`:
+
+1. **Cross-engine identities.** The composed numbers equal their parts, exactly.
+   The expected uplift **is** the sum of the three monetised levers; the routing
+   lever **is** the CVRP's km saved priced at EUR 1.15/km over 250 runs/yr; the
+   assortment lever **is** the MILP's margin edge over greedy; gross margin **is**
+   revenue − COGS; and the uplift % is quoted against *annual* gross margin (the
+   24-month history halved). Sixteen such identities are asserted; if one engine
+   drifts from another, the check fails.
+2. **Doc-drift guard.** Each headline number is formatted exactly as the README
+   displays it and asserted to be present in this file — so an engine value can't
+   change without the README (and this section) being updated in lock-step.
+
+Honesty: it reconciles *internal consistency*, not correctness — it proves the
+engines and the docs agree, not that the models are right about a real
+distributor. The README-presence guard works at the precision the README prints
+(e.g. MASE to two decimals); the identity checks and the CSV `value` column
+carry full engine precision. Deterministic and byte-identical across runs (the
+committed reports are pinned to a fresh regeneration by a test), on the same
+seeded synthetic data as everything else.
+
 ## Running it
 
 ```bash
@@ -261,7 +291,10 @@ python app.py                 # -> http://localhost:5000
 # 2) the executive deliverables
 python -m dip --deliverables  # writes deliverables/executive_review.pdf + .xlsx
 
-# 3) containerised
+# 3) the numbers reconciliation
+python -m dip --reconcile     # writes docs/RECONCILIATION.md + reconciliation.csv
+
+# 4) containerised
 docker compose up             # serves on http://localhost:5000 via gunicorn
 ```
 
@@ -298,6 +331,7 @@ dip/optimize.py    assortment MILP / elasticity pricing / OR-Tools CVRP
 dip/prescribe.py   composes the lifts into one plan + action cards
 dip/explain.py     "why this plan?" — binding constraints, moves, sensitivity
 dip/scenario.py    A/B compare: two named budget/guardrail scenarios + deltas
+dip/reconcile.py   cross-engine reconciliation: headline numbers -> engine fields
 dip/exports.py     PDF (matplotlib) and Excel (openpyxl) from that plan
    |
 app.py             Flask: engines cached per dataset (synthetic or imported)

@@ -4,6 +4,7 @@ Usage
 -----
 ``python -m dip``                 run the dashboard on http://localhost:5000
 ``python -m dip --deliverables``  write deliverables/*.pdf and *.xlsx
+``python -m dip --reconcile``     write docs/RECONCILIATION.md + reconciliation.csv
 """
 
 from __future__ import annotations
@@ -55,12 +56,40 @@ def _write_deliverables(out_dir: Path) -> list[tuple[Path, int]]:
     return written
 
 
+def _write_reconciliation() -> int:
+    """Write the reconciliation report to docs/ and report the check result.
+
+    Regenerates docs/RECONCILIATION.md + docs/reconciliation.csv (both committed,
+    tracked deliverables) and returns 0 only if every cross-engine identity holds
+    and every headline number is still present in the README.
+    """
+    from dip import reconcile as rec_mod
+
+    rec = rec_mod.reconcile()
+    paths = rec_mod.write_reports()
+    for name, path in paths.items():
+        print(f"[OK] wrote {path}  ({name})")
+    n_ok = sum(1 for i in rec["identities"] if i["ok"])
+    print(f"[{'OK' if rec['identities_ok'] else 'FAIL'}] identities: {n_ok}/{len(rec['identities'])} hold")
+    if rec["readme_ok"]:
+        print(f"[OK] README presence: all {len(rec['claims'])} headline numbers found")
+    else:
+        print(f"[FAIL] README missing: {rec['readme_missing']}", file=sys.stderr)
+    print("[OK] reconciliation clean" if rec["all_ok"] else "[FAIL] reconciliation found drift")
+    return 0 if rec["all_ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m dip", description=__doc__)
     parser.add_argument(
         "--deliverables",
         action="store_true",
         help="write the executive PDF + Excel deliverables and exit",
+    )
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="write docs/RECONCILIATION.md + reconciliation.csv and exit",
     )
     parser.add_argument(
         "--out",
@@ -70,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="0.0.0.0", help="Flask host (server mode)")
     parser.add_argument("--port", type=int, default=5000, help="Flask port (server mode)")
     args = parser.parse_args(argv)
+
+    if args.reconcile:
+        return _write_reconciliation()
 
     if args.deliverables:
         written = _write_deliverables(Path(args.out))
