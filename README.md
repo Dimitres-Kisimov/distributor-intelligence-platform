@@ -260,6 +260,17 @@ number → the exact `engine.function.field` it traces to, plus the string the
 README prints for it). It checks two things, both enforced by
 `tests/test_reconcile.py`:
 
+And it isn't only a test artefact — the same ledger is **shown to a viewer**.
+The dashboard's **Reconciliation** button opens an **executive brief** at
+`/reconcile` (with `GET /api/reconcile` serving the identical ledger as JSON):
+the honest, provenance-labelled headline KPIs up top, then every number traced
+to its engine field and every cross-engine identity, under a single "no silent
+drift" verdict. The property is *visible*, not just asserted.
+
+![Executive brief at /reconcile — a green "No silent drift" verdict (16/16 cross-engine identities hold, all 21 headline numbers present in the README), the honest headline KPIs each labelled with their engine source, and the full ledger tracing every number to its engine field with the cross-engine identities](docs/img/reconciliation.png)
+
+*Server-rendered from `dip.reconcile` on the seeded synthetic dataset; the brief cannot drift from the engines because it is built from their ledger (tested).*
+
 1. **Cross-engine identities.** The composed numbers equal their parts, exactly.
    The expected uplift **is** the sum of the three monetised levers; the routing
    lever **is** the CVRP's km saved priced at EUR 1.15/km over 250 runs/yr; the

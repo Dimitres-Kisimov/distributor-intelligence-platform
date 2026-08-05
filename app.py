@@ -15,12 +15,13 @@ in process memory only; nothing is written to disk.
 
 Routes
 ------
-HTML : ``/`` dashboard, ``/routes`` and ``/assortment`` focused sub-views
+HTML : ``/`` dashboard, ``/routes`` and ``/assortment`` focused sub-views,
+       ``/reconcile`` the executive brief (headline numbers -> engine sources)
 API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
        ``/api/margin-bridge`` ``/api/abc-xyz`` ``/api/rfm`` ``/api/revenue``
        ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
        ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
-       ``/api/scenario/compare`` (POST)
+       ``/api/scenario/compare`` (POST) ``/api/reconcile``
        ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
@@ -53,6 +54,7 @@ from dip import (
     importer,
     optimize,
     prescribe,
+    reconcile,
     scenario,
 )
 from dip.data import build_dataset
@@ -122,6 +124,40 @@ STATE = _SYNTHETIC_STATE
 _LOCK = threading.Lock()
 
 DEFAULT_MAX_CHANGE = 0.15
+
+
+# ---- reconciliation snapshot (the "no silent drift" ledger, for a viewer) ---
+# ``dip.reconcile`` re-runs the engines on the *seeded synthetic* dataset and
+# ties every published headline number to the engine field it comes from — it is
+# about the platform's published figures, so it is computed on the synthetic
+# dataset regardless of any imported state. Built once, lazily, and cached (it
+# re-runs every engine, same cost as one dataset build), matching the app's
+# compute-once-then-cache philosophy. Deterministic, so the cache is safe.
+_RECONCILE_CACHE: dict | None = None
+
+# The five figures the executive brief leads with, each pulled *from* a reconcile
+# claim by its engine-source key so the hero can never drift from the ledger.
+# (source-field, tile label, method/provenance sub-label, accent class)
+_BRIEF_KPIS = [
+    ("analytics.kpis.revenue", "Revenue (24 mo)", "sum of the monthly ledger · analytics.kpis", ""),
+    ("analytics.kpis.gross_margin", "Gross margin", "revenue − COGS · analytics.kpis", "green"),
+    ("prescribe.build_plan.expected_uplift_eur", "Expected annual uplift",
+     "modelled: sum of 3 levers · prescribe.build_plan", "pink"),
+    ("forecast.forecast_revenue.mase", "Forecast accuracy",
+     "rolling-origin backtest · forecast.forecast_revenue", "amber"),
+    ("optimize.optimize_routes.pct_saved", "Routing efficiency",
+     "km saved per run vs nearest-neighbour · optimize.optimize_routes", ""),
+]
+
+
+def _reconcile_snapshot() -> dict:
+    """Return the cached cross-engine reconciliation for the seeded dataset."""
+    global _RECONCILE_CACHE
+    if _RECONCILE_CACHE is None:
+        with _LOCK:
+            if _RECONCILE_CACHE is None:
+                _RECONCILE_CACHE = reconcile.reconcile()
+    return _RECONCILE_CACHE
 
 
 # ---- optional API auth (deployment stub) -----------------------------------
@@ -284,6 +320,27 @@ def assortment_view() -> str:
     return _render_dashboard("assortment")
 
 
+@app.route("/reconcile")
+def reconcile_page() -> str:
+    """Executive brief: the honest headline KPIs + the cross-engine ledger.
+
+    A server-rendered, JS-free presentation of :func:`dip.reconcile.reconcile`
+    — every headline number traced to the engine field it comes from, and the
+    cross-engine identities that keep the composed figures honest, shown to a
+    viewer rather than only asserted in the test suite. Always reports on the
+    seeded synthetic dataset (the platform's published figures), so it is
+    stable whatever data is loaded on the main dashboard.
+    """
+    rec = _reconcile_snapshot()
+    by_source = {c["source"]: c for c in rec["claims"]}
+    brief_kpis = [
+        {"claim": by_source[src], "label": label, "sub": sub, "accent": accent}
+        for src, label, sub, accent in _BRIEF_KPIS
+        if src in by_source
+    ]
+    return render_template("reconcile.html", rec=rec, brief_kpis=brief_kpis)
+
+
 # ---- JSON API --------------------------------------------------------------
 @app.route("/api/health")
 def api_health():
@@ -296,6 +353,17 @@ def api_health():
             "source": st["source"],
         }
     )
+
+
+@app.route("/api/reconcile")
+def api_reconcile():
+    """The cross-engine reconciliation ledger as JSON (the ``/reconcile`` data).
+
+    Headline numbers each traced to their engine source field, the cross-engine
+    identities with their pass/fail flags, and the ``all_ok`` verdict — computed
+    on the seeded synthetic dataset, the same object the executive brief renders.
+    """
+    return jsonify(_reconcile_snapshot())
 
 
 @app.route("/api/kpis")

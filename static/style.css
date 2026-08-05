@@ -393,3 +393,66 @@ input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius
 .why-sens { font-size: 13px; line-height: 1.55; }
 .why-caveats { margin: 4px 0 0 18px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
 .why-caveats li { margin: 4px 0; }
+
+/* ---------- executive brief / reconciliation ledger (/reconcile) ---------- */
+.brief { display: flex; flex-direction: column; min-height: 100vh; }
+.brief .content { max-width: 1200px; width: 100%; margin: 0 auto; }
+.brief-brand { display: flex; align-items: center; gap: 13px; }
+.brief-brand .logo {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--blue), var(--green));
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 16px;
+  box-shadow: 0 4px 12px rgba(47, 107, 255, 0.35); flex: none;
+}
+
+/* verdict banner — the "no silent drift" property, made visible */
+.verdict {
+  display: flex; align-items: center; gap: 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px 20px;
+}
+.verdict.ok { background: color-mix(in srgb, var(--green) 9%, var(--panel)); border-left: 5px solid var(--green); }
+.verdict.fail { background: color-mix(in srgb, var(--pink) 10%, var(--panel)); border-left: 5px solid var(--pink); }
+.verdict .v-mark {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 21px; font-weight: 800; color: #fff;
+}
+.verdict.ok .v-mark { background: var(--green); }
+.verdict.fail .v-mark { background: var(--pink); }
+.verdict .v-body { min-width: 0; }
+.verdict .v-head { font-size: 17px; font-weight: 800; letter-spacing: -.2px; }
+.verdict .v-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.verdict .v-sub code { font-size: 11.5px; }
+.verdict .v-pill {
+  margin-left: auto; flex: none; font-size: 11px; font-weight: 700;
+  padding: 4px 11px; border-radius: 20px; color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.brief-kpis { margin-top: 4px; }
+.brief-note { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin: 2px 2px 0; }
+
+/* ledger tables reuse .drill-table; a taller scroll box + source/badge styling */
+.ledger-scroll { max-height: 460px; }
+.ledger-table td { vertical-align: top; }
+.ledger-table th.mid, .ledger-table td.mid { text-align: center; }
+.ledger-table .src { font-size: 11px; color: var(--blue); word-break: break-all; }
+.ledger-table .id-stmt { font-size: 12px; line-height: 1.4; }
+.ledger-table .id-eq { font-size: 11px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.ledger-table .tick { color: var(--green); font-weight: 800; }
+.ledger-table .cross { color: var(--pink); font-weight: 800; }
+
+.brief-caveats { margin: 2px 0 0 18px; font-size: 13px; color: var(--text); line-height: 1.6; }
+.brief-caveats li { margin: 6px 0; }
+.brief-caveats b { color: var(--text); }
+.brief-foot { font-size: 11.5px; color: var(--muted); text-align: center; padding: 8px 0 4px; line-height: 1.6; }
+
+@media (max-width: 1180px) {
+  .brief-kpis { grid-template-columns: repeat(2, 1fr); }
+  .brief .card.col-7, .brief .card.col-5 { grid-column: span 12; }
+}
+@media (max-width: 760px) {
+  .brief-kpis { grid-template-columns: 1fr; }
+  .verdict { flex-wrap: wrap; }
+  .verdict .v-pill { margin-left: 0; }
+}

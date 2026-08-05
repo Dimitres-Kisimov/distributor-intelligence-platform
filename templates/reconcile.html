@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Executive Brief &middot; Distributor Intelligence Platform</title>
+  <meta name="description" content="Executive brief for the Distributor Intelligence Platform: the honest headline KPIs and the machine-checked ledger tracing every one back to the engine field it comes from." />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6bff'/%3E%3Ctext x='16' y='22' font-size='16' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EDI%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+{% set n_ids = rec.identities | length %}
+{% set n_ids_ok = rec.identities | selectattr('ok') | list | length %}
+{% set n_claims = rec.claims | length %}
+<div class="brief">
+  <header class="topbar">
+    <div class="brief-brand">
+      <div class="logo">DI</div>
+      <div>
+        <h1>Executive Brief</h1>
+        <div class="crumb">Distributor Intelligence Platform &middot; every headline number, traced to its engine</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <a class="btn" href="/" title="Back to the live command-center dashboard">&larr; Command Center</a>
+      <a class="btn" href="/api/reconcile" title="The same ledger as JSON">View JSON</a>
+      <a class="btn primary" href="/api/export/pdf" title="The executive PDF, computed from the same plan">Executive PDF</a>
+    </div>
+  </header>
+
+  <div class="content">
+    <!-- Verdict banner: the "no silent drift" property, made visible -->
+    <section class="verdict {{ 'ok' if rec.all_ok else 'fail' }}">
+      <span class="v-mark">{{ '✓' if rec.all_ok else '✕' }}</span>
+      <div class="v-body">
+        <div class="v-head">{{ 'No silent drift' if rec.all_ok else 'Reconciliation found drift' }}</div>
+        <div class="v-sub">
+          {{ n_ids_ok }}/{{ n_ids }} cross-engine identities hold &middot;
+          {% if rec.readme_ok %}all {{ n_claims }} headline numbers present in the README{% else %}{{ rec.readme_missing | length }} headline number(s) missing from the README{% endif %}.
+          Machine-checked by <code>dip.reconcile</code>; enforced in CI by <code>tests/test_reconcile.py</code>.
+        </div>
+      </div>
+      <span class="v-pill">seed {{ rec.seed }}</span>
+    </section>
+
+    <!-- Honest headline KPIs (each value pulled from a reconcile claim) -->
+    <section class="kpi-row brief-kpis">
+      {% for k in brief_kpis %}
+      <div class="kpi {{ k.accent }}">
+        <div class="label">{{ k.label }}</div>
+        <div class="value">{{ k.claim.display }}</div>
+        <div class="delta">{{ k.sub }}</div>
+      </div>
+      {% endfor %}
+    </section>
+    <p class="brief-note">
+      Every figure is measured on the <b>{{ rec.data_label }}</b>. It models no real
+      company &mdash; these numbers are illustrative of the method, not a benchmark or a
+      real-world claim. The uplift is <b>modelled, not measured</b>: it is the sum of three
+      monetised levers, each traced to its own optimiser below.
+    </p>
+
+    <div class="grid">
+      <!-- Headline numbers -> engine source -->
+      <div class="card col-7">
+        <div class="card-head">
+          <div class="card-title">Headline number &rarr; engine source</div>
+          <span class="card-note">each value is the exact field the engine returns</span>
+        </div>
+        <div class="drill-scroll ledger-scroll">
+          <table class="drill-table ledger-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th class="num">Value shown</th>
+                <th>Traces to engine field</th>
+                <th class="mid">In README</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in rec.claims %}
+              <tr>
+                <td>{{ c.label }}</td>
+                <td class="num">{{ c.display }}</td>
+                <td><code class="src">{{ c.source }}</code></td>
+                <td class="mid">
+                  {% if c.in_readme %}<span class="tick">&#10003;</span>{% else %}<span class="cross">&#10007;</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Cross-engine identities -->
+      <div class="card col-5">
+        <div class="card-head">
+          <div class="card-title">Cross-engine identities</div>
+          <span class="card-note">composed figures equal their parts</span>
+        </div>
+        <div class="drill-scroll ledger-scroll">
+          <table class="drill-table ledger-table">
+            <thead>
+              <tr>
+                <th>Identity</th>
+                <th class="mid">Holds</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in rec.identities %}
+              <tr>
+                <td>
+                  <div class="id-stmt">{{ i.statement }}</div>
+                  <div class="id-eq"><code>{{ i.lhs }} = {{ i.rhs }}</code></div>
+                </td>
+                <td class="mid">
+                  {% if i.ok %}<span class="tick">&#10003;</span>{% else %}<span class="cross">&#10007;</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Honest limitations -->
+      <div class="card col-12">
+        <div class="card-head">
+          <div class="card-title">What this does &mdash; and does not &mdash; prove</div>
+        </div>
+        <ul class="brief-caveats">
+          <li><b>Synthetic data.</b> Every figure is measured on one seeded synthetic dataset; it is illustrative of the method, not a real-world benchmark or a claim of state-of-the-art performance.</li>
+          <li><b>Internal consistency, not correctness.</b> This proves the engines agree with each other and with the docs to the cent (or the reported %); it does not validate the underlying models against real demand, prices or routes.</li>
+          <li><b>The README guard works at display precision.</b> A figure the README rounds (e.g. MASE to two decimals) is checked at that precision; the identity checks and the CSV <code>value</code> column carry the engines' full precision.</li>
+          <li><b>Deterministic.</b> The dataset is seeded and every engine terminates on a fixed seed / solution budget (never a wall clock), so this ledger is byte-identical on every run &mdash; regenerate the full report with <code>python -m dip --reconcile</code>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="brief-foot">
+      &copy; 2026 Dimitres Kisimov &middot; all rights reserved (published for portfolio review) &middot;
+      generated from <code>dip.reconcile</code> on the seeded synthetic dataset
+    </div>
+  </div>
+</div>
+</body>
+</html>
