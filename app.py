@@ -21,7 +21,7 @@ API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
        ``/api/margin-bridge`` ``/api/abc-xyz`` ``/api/rfm`` ``/api/revenue``
        ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
        ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
-       ``/api/scenario/compare`` (POST) ``/api/reconcile``
+       ``/api/sensitivity`` ``/api/scenario/compare`` (POST) ``/api/reconcile``
        ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
@@ -56,6 +56,7 @@ from dip import (
     prescribe,
     reconcile,
     scenario,
+    sensitivity,
 )
 from dip.data import build_dataset
 
@@ -100,6 +101,13 @@ def _build_cache(ds, routes: dict | None = None) -> dict:
     # same km and the same uplift, so routing and pricing are solved exactly
     # once per dataset above.
     cache["prescribe"] = prescribe.build_plan(ds, routes=cache["routes"], prices=cache["prices"])
+    # Driver sensitivity anchors its base to the cached plan/KPIs (so the "no
+    # shock" column IS the served plan) and shares the one routing solve with
+    # every perturbed run — the drivers don't move logistics. Computed once per
+    # dataset here, like every other engine, so the endpoint serves from cache.
+    cache["sensitivity"] = sensitivity.driver_sensitivity(
+        ds, routes=cache["routes"], base_plan=cache["prescribe"], base_kpis=cache["kpis"]
+    )
     return cache
 
 
@@ -474,6 +482,31 @@ def api_explain():
     budget = _float_arg("budget")
     max_change = _float_arg("max_change", default=DEFAULT_MAX_CHANGE)
     return jsonify(_explain_for(budget, max_change))
+
+
+@app.route("/api/sensitivity")
+def api_sensitivity():
+    """Driver sensitivity / tornado: shock demand, lead time and cost by ±shock.
+
+    Re-runs the engine stack on perturbed copies of the served dataset and
+    returns, per driver, the low/high outcomes and their deltas versus the base,
+    plus a tornado ranking by the effect on the headline uplift. The default
+    ``±10%`` result is served from the per-dataset cache; ``?shock=<f>`` (a
+    fraction in (0, 1)) re-computes on the fly. 400 on a non-numeric or
+    out-of-range shock. Deterministic and, in imported mode, provenance-labelled.
+    """
+    st = STATE
+    raw = request.args.get("shock")
+    if raw is None:
+        return jsonify(st["cache"]["sensitivity"])
+    shock = _float_arg("shock")  # rejects non-numeric / non-finite with 400
+    try:
+        result = sensitivity.driver_sensitivity(
+            st["ds"], shock=shock, routes=st["cache"]["routes"], source=st["source"]
+        )
+    except sensitivity.SensitivityError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)
 
 
 @app.route("/api/scenario/compare", methods=["POST"])

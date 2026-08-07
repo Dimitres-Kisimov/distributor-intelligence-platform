@@ -230,6 +230,47 @@ Honesty, all disclosed on the payload, the panel and the sheet:
   even while it captures more absolute margin. The compare reports it in `note`
   rather than hiding it — the same effect the budget sensitivity surfaces.
 
+## Driver sensitivity (how robust is the headline?)
+
+The scenario compare above moves the *decision knobs* (budget, guardrail). This
+answers the other question a sceptical board asks: **if the assumptions we don't
+control move, how much does the EUR 136,972 move with them?** `GET
+/api/sensitivity` runs a one-at-a-time (OAT) **tornado** over the three
+exogenous drivers — demand level, supplier lead time, and unit cost — shocking
+each alone by `±shock` (default `±10%`; `?shock=` re-computes) across the whole
+range and re-running the *same* engine stack on a perturbed copy of the dataset.
+For every driver it reports how both the headline KPIs (revenue, gross margin,
+margin %, OTIF) and the plan (the uplift and its three levers) respond, then
+ranks the drivers by how wide they swing the uplift. On the seed:
+
+| Driver (±10%) | Uplift swing (low → high) | What it moves |
+| --- | --- | --- |
+| Demand level | **EUR 19,025** (−EUR 10,130 / +EUR 8,895) | revenue, pricing & assortment levers |
+| Unit cost | EUR 1,628 (−EUR 147 / +EUR 1,482) | gross margin, pricing & assortment economics |
+| Supplier lead time | EUR 180 | working capital, assortment budget, OTIF |
+
+Demand dominates the tornado; the headline uplift is ~13× more sensitive to a
+volume shock than to a cost shock and ~100× more than to lead time. Nothing is
+re-invented — every perturbed figure comes from the same `dip.analytics.kpis`
+and `dip.prescribe.build_plan` the dashboard serves, so a perturbed uplift still
+**equals the sum of its three levers** (the identity the reconciliation guard
+pins on the base case).
+
+Honesty, all disclosed on the payload:
+
+- **The base ties to the live plan** and is served from the per-dataset cache;
+  the "no shock" column *is* the EUR 136,972 on screen, not a re-solve of it.
+- **Some non-effects are the point, and they are exactly zero.** A pure demand
+  (volume) shock scales revenue and COGS together, so **gross-margin % is
+  unchanged**; a cost shock holds revenue (prices are held — it measures margin
+  exposure, not a repricing); a lead-time shock never touches the revenue
+  ledger. **Routing is invariant to all three drivers** (it depends on the
+  customer/geography layer), so the base routing solve is shared and the routing
+  lever is flat in every row — a real finding, labelled, not hidden.
+- **OAT ignores interactions** (a joint demand-and-cost move is not the sum of
+  the two single moves) and the shock is applied uniformly across the range.
+  Deterministic; a bad or out-of-range `shock` returns `400`.
+
 ## Power BI pack
 
 `powerbi/` is a **Power BI Desktop showcase** generated from the platform: run
