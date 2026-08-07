@@ -21,7 +21,8 @@ API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
        ``/api/margin-bridge`` ``/api/abc-xyz`` ``/api/rfm`` ``/api/revenue``
        ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
        ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
-       ``/api/sensitivity`` ``/api/scenario/compare`` (POST) ``/api/reconcile``
+       ``/api/inventory`` ``/api/sensitivity`` ``/api/scenario/compare`` (POST)
+       ``/api/reconcile``
        ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
@@ -52,6 +53,7 @@ from dip import (
     exports,
     forecast,
     importer,
+    inventory,
     optimize,
     prescribe,
     reconcile,
@@ -108,6 +110,12 @@ def _build_cache(ds, routes: dict | None = None) -> dict:
     cache["sensitivity"] = sensitivity.driver_sensitivity(
         ds, routes=cache["routes"], base_plan=cache["prescribe"], base_kpis=cache["kpis"]
     )
+    # Inventory replenishment policy reuses the cached ABC-XYZ classification to
+    # set each SKU's service target — the descriptive layer driving a decision.
+    # Computed once per dataset here, like every other engine, so the endpoint
+    # serves from cache; the default-service result is cached, a ?service_level
+    # override re-computes on the fly.
+    cache["inventory"] = inventory.inventory_policy(ds, abc_xyz_result=cache["abc_xyz"])
     return cache
 
 
@@ -505,6 +513,34 @@ def api_sensitivity():
             st["ds"], shock=shock, routes=st["cache"]["routes"], source=st["source"]
         )
     except sensitivity.SensitivityError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)
+
+
+@app.route("/api/inventory")
+def api_inventory():
+    """Per-SKU replenishment policy (safety stock / ROP / EOQ) + portfolio totals.
+
+    Service targets are read from the ABC-XYZ matrix, reusing the cached
+    classification. The default synthetic result is served from the per-dataset
+    cache; ``?service_level=<f>`` (a flat cycle-service level in (0, 1)) overrides
+    every SKU and re-computes on the fly (cheap — it reuses the cached ABC-XYZ).
+    400 on a non-numeric or out-of-range service level. Deterministic, and in
+    imported mode the provenance label is carried through.
+    """
+    st = STATE
+    raw = request.args.get("service_level")
+    if raw is None and st["source"].get("synthetic", True):
+        return jsonify(st["cache"]["inventory"])
+    service_level = _float_arg("service_level") if raw is not None else None
+    try:
+        result = inventory.inventory_policy(
+            st["ds"],
+            service_level=service_level,
+            abc_xyz_result=st["cache"]["abc_xyz"],
+            source=st["source"],
+        )
+    except inventory.InventoryError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(result)
 

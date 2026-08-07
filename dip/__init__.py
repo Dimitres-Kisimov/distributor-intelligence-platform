@@ -18,6 +18,7 @@ from .analytics import (
 from .crosssell import mine_crosssell
 from .data import build_dataset
 from .forecast import forecast_revenue
+from .inventory import inventory_policy
 from .optimize import optimize_assortment, optimize_prices, optimize_routes
 from .prescribe import build_plan
 from .scenario import compare_scenarios
@@ -30,6 +31,7 @@ __all__ = [
     "compare_scenarios",
     "driver_sensitivity",
     "forecast_revenue",
+    "inventory_policy",
     "kpi_drilldown",
     "kpis",
     "margin_bridge",

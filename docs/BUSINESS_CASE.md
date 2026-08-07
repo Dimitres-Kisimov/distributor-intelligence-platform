@@ -30,9 +30,16 @@ Three decisions are being left on the table every week:
   runs **560 km**; a solved CVRP runs **420 km** — **140 km (25%) saved per
   run**. Over ~250 runs/yr at EUR 1.15/km that is **~EUR 40,300/yr**.
 
-On top of that, purchasing and safety stock are set without a real forecast;
-the platform supplies one at **MASE 0.38** (beats seasonal-naive), so inventory
-can be aligned to the seasonal curve rather than to last month.
+On top of that, purchasing and safety stock are set without a real forecast.
+The platform closes that gap from both ends: it supplies a backtested demand
+forecast (**MASE 0.38**, beats seasonal-naive) *and* turns the demand signal into
+a **continuous-review inventory policy** — per-SKU safety stock, reorder point
+and EOQ, with cycle service levels differentiated by ABC-XYZ class. On the seed
+that policy holds **EUR 127,421** of inventory working capital at **5.5 turns**
+and a **99.9%** demand-weighted fill rate; it is the rigorous working-capital
+figure the assortment MILP only proxies with a crude cycle-stock term. (It is a
+stocking *policy*, not an incremental-€ lever, so it is deliberately kept out of
+the uplift total below.)
 
 ## Solution
 
@@ -42,6 +49,9 @@ One platform that turns that ERP data into decisions:
 - A backtested Holt-Winters forecast for planning.
 - Three optimisation engines — MILP assortment, elasticity pricing, OR-Tools
   CVRP routing — each measured against a fair baseline.
+- A continuous-review inventory policy (safety stock / reorder point / EOQ) that
+  turns the ABC-XYZ classes and lead times into stocking decisions and the
+  working capital they commit.
 - A prescription layer that rolls the lifts into one number and a ranked set of
   action cards, exported as an executive PDF and Excel workbook.
 
@@ -63,6 +73,8 @@ discipline, not the software cost.
 - **Commercial / Pricing lead** — owns the elasticity pricing recommendations.
 - **Category / Merchandising** — owns the assortment-vs-capital trade-off.
 - **Logistics / Depot supervisor** — owns the routing plan.
+- **Purchasing / Inventory planner** — owns the safety-stock, reorder-point and
+  order-quantity policy and the service levels behind it.
 - **Finance** — owns the forecast, the working-capital budget, and the margin
   bridge.
 - **Managing Director** — reads the one-page expected-uplift view and the

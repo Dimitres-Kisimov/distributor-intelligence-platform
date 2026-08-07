@@ -45,7 +45,10 @@ Four things, layered:
 3. **Optimise** — three prescriptive engines, each shipped next to a fair
    baseline so the lift is always quantified: a MILP assortment (vs a greedy
    density heuristic), elasticity-based pricing (vs status quo), and an
-   OR-Tools CVRP for the delivery run (vs nearest-neighbour construction).
+   OR-Tools CVRP for the delivery run (vs nearest-neighbour construction). A
+   continuous-review **inventory policy** (safety stock / reorder point / EOQ)
+   sits alongside them, turning the ABC-XYZ classes and lead times into how much
+   to hold and when to re-order.
 4. **Prescribe** — the composition layer that rolls the three lifts into one
    expected annual € uplift and a set of ranked "recommended action" cards, and
    emits an executive PDF and Excel workbook from the exact same plan. The
@@ -271,6 +274,67 @@ Honesty, all disclosed on the payload:
   the two single moves) and the shock is applied uniformly across the range.
   Deterministic; a bad or out-of-range `shock` returns `400`.
 
+## Inventory policy (safety stock / reorder point / EOQ)
+
+The descriptive layer classifies every SKU by ABC-XYZ and the forecast earns a
+demand signal — but neither one tells the purchasing desk the thing it actually
+needs: **how much to hold, and when to re-order.** `GET /api/inventory` closes
+that loop with a textbook continuous-review **(reorder point, order quantity)**
+policy, and in doing so it lets the ABC-XYZ grid finally *drive a decision*
+instead of only colouring a matrix.
+
+For every SKU it derives — from the seeded demand mean and variability, the
+supplier lead time and the unit cost:
+
+- a **cycle service-level target** read from an ABC-XYZ policy matrix (important,
+  predictable A/X lines protected to 98%; long-tail erratic C/Z lines to 88%);
+- **safety stock** `SS = z · σ_L` — the buffer against demand variability over
+  the replenishment lead time (`σ_L` = the monthly demand std scaled by the
+  square root of the lead-time window, `z` = the normal quantile of the service
+  target);
+- the **reorder point** `ROP = μ_L + SS`, the **EOQ** (the Wilson lot size that
+  trades ordering cost against holding cost), the implied **order-up-to** level,
+  the **average inventory** and its **working-capital** value, **inventory
+  turns**, **days of cover**, the annual **holding + ordering** cost, and the
+  **fill rate** the policy implies (via the standard-normal loss function).
+
+On the seed, across 200 SKUs at the matrix service targets:
+
+| Metric | Value |
+| --- | --- |
+| Inventory working capital | EUR 127,421 (cycle EUR 111,139 + safety EUR 16,282) |
+| Inventory turns | 5.5x (66 days of cover) |
+| Annual holding + ordering cost | EUR 59,640 |
+| Demand-weighted fill rate | 99.9% (at a 95.3% weighted cycle service level) |
+
+The per-SKU rows carry the full policy (safety stock, ROP, EOQ, order-up-to,
+average inventory, turns, fill rate), and a nine-cell ABC-XYZ roll-up shows where
+the working capital and the safety stock sit. `GET /api/inventory?service_level=0.9`
+overrides every SKU with one flat cycle service level (a what-if), validated to
+`(0, 1)` — a 400 on anything else. The working capital equals cycle stock plus
+safety stock exactly, and inventory turns = annual COGS / working capital
+(both asserted by tests). Deterministic: pure arithmetic plus the fixed normal
+quantile / loss functions on the seeded data, no RNG and no wall clock.
+
+Honesty notes (all disclosed on the payload):
+
+- **Demand is modelled as normal and serially independent** (σ scales with the
+  square root of the lead time). Real demand — especially the erratic Z lines —
+  is lumpier; a production system would fit a per-SKU distribution and use the
+  forecast's own residuals. Modelled, not measured.
+- **The carrying rate (25%/yr) and order cost (EUR 50) are stated planning
+  assumptions**, not figures observed from this synthetic world; the EOQ and the
+  holding/ordering split move with them.
+- **The ABC-XYZ service matrix is a policy choice** informed by standard
+  segmentation practice — it is not a certification of the right service level
+  for any real business.
+- **This is the rigorous working-capital figure the assortment MILP only
+  proxies** with a crude cycle-stock term; the two are different models and are
+  deliberately not forced equal.
+- Computed on the seeded synthetic dataset (or an imported workbook — where lead
+  time is the import default and the customer/routing layer stays synthetic);
+  illustrative of the method, not a real-world claim.
+
 ## Power BI pack
 
 `powerbi/` is a **Power BI Desktop showcase** generated from the platform: run
@@ -380,6 +444,7 @@ dip/analytics.py   KPIs (+ drill-downs), breakdowns, ABC-XYZ, RFM, margin bridge
 dip/crosssell.py   Apriori cross-sell rules (adapted from market-basket-analysis)
 dip/forecast.py    Holt-Winters + rolling-origin MASE backtest
 dip/optimize.py    assortment MILP / elasticity pricing / OR-Tools CVRP
+dip/inventory.py   continuous-review (ROP, EOQ) policy — ABC-XYZ service targets
 dip/prescribe.py   composes the lifts into one plan + action cards
 dip/explain.py     "why this plan?" — binding constraints, moves, sensitivity
 dip/scenario.py    A/B compare: two named budget/guardrail scenarios + deltas
