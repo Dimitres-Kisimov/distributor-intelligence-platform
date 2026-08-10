@@ -48,7 +48,9 @@ Four things, layered:
    OR-Tools CVRP for the delivery run (vs nearest-neighbour construction). A
    continuous-review **inventory policy** (safety stock / reorder point / EOQ)
    sits alongside them, turning the ABC-XYZ classes and lead times into how much
-   to hold and when to re-order.
+   to hold and when to re-order — and a **supplier-reliability scorecard**
+   measures the PO receipt history to price what lead-time reality (delay and
+   wobble, separately) costs in safety stock versus the vendor master's quotes.
 4. **Prescribe** — the composition layer that rolls the three lifts into one
    expected annual € uplift and a set of ranked "recommended action" cards, and
    emits an executive PDF and Excel workbook from the exact same plan. The
@@ -335,6 +337,75 @@ Honesty notes (all disclosed on the payload):
   time is the import default and the customer/routing layer stays synthetic);
   illustrative of the method, not a real-world claim.
 
+## Supplier reliability (measured lead times → the safety stock they cost)
+
+The inventory policy above prices every buffer off the *quoted* supplier lead
+time — and says so in its own caveats. `GET /api/reliability` applies the
+discipline a purchasing desk actually uses: **measure the receipts, not the
+vendor master.** The seeded dataset carries a purchase-order receipt history —
+10 suppliers, 12 receipts per SKU (2,400 in all), each recording the quoted
+lead time next to the actually observed one — and the engine turns it into:
+
+- **Supplier scorecards** — per supplier: on-time rate (on-time = actual ≤
+  quoted + a stated 2-day grace window; `?tolerance_days=` re-scores against
+  any window in [0, 30]), mean delay, quoted vs observed lead time, lead-time
+  coefficient of variation, and a letter grade — ranked not by the grade but by
+  **what the supplier's behaviour costs**.
+- **The safety-stock consequence** — per SKU, safety stock is re-derived with
+  the textbook *variable lead-time* formula
+  `σ_LTD = √(L̄·σ_D² + D̄²·σ_L²)` at the **same ABC-XYZ service target the
+  inventory policy uses**, and the gap to the quoted-basis figure is split
+  exactly into a **delay effect** (the average is longer/shorter than quoted —
+  can be negative) and a **variability effect** (the wobble — never negative).
+
+On the seed, at the matrix service targets:
+
+| Metric | Value |
+| --- | --- |
+| Receipt history | 10 suppliers, 2,400 receipts, 74.3% on-time (2-day grace) |
+| Safety stock, quoted lead times | EUR 16,282 (the inventory engine's figure, to the cent) |
+| Safety stock, measured lead times | EUR 18,626 (**+EUR 2,344, +14.4%**) |
+| ...split | delay effect EUR 576 + variability effect EUR 1,768 |
+| Extra annual holding cost | EUR 586 (at the same 25%/yr carrying rate) |
+| Worst scorecard | SUP-06 (grade D, 59% on-time): EUR 723 of the gap |
+
+Two findings the split surfaces that an on-time percentage alone would hide:
+**variability, not lateness, is three quarters of the bill** — and one supplier
+(SUP-02) delivers *early* on average (−0.4 days) yet still costs EUR 542,
+because its delay effect (−EUR 79) is swamped by its variability effect
+(+EUR 621). Meanwhile the grade-A supplier carries the largest portfolio
+(45 SKUs, 99.3% on-time) for a EUR 68 consequence. That is the argument for
+buying *predictability*, made in EUR.
+
+The quoted-basis column reproduces `dip.inventory`'s safety stock **exactly,
+SKU by SKU and in total** (asserted by tests) — same service matrix, same
+z-factors, same day/month conventions — so the delta is a true consequence of
+lead-time reality vs the vendor master, never a re-modelling artefact. The
+decomposition is exact too: delay + variability = delta, per SKU, per supplier
+and in total (also asserted). Deterministic: pure arithmetic over the seeded
+receipt history, no RNG and no wall clock.
+
+Honesty notes (all disclosed on the payload):
+
+- **The receipts are seeded synthetic data**, generated from hidden per-supplier
+  bias/variability profiles that the engine never reads — it measures the
+  receipt history the way a real scorecard measures deliveries. The scorecard
+  therefore recovers the generator's own profile; it is not a claim about any
+  real vendor. The receipt draws are appended to the end of the rng stream, so
+  every previously published number is byte-identical to builds that predate
+  the supplier layer (pinned by a regression test).
+- **This is a working-capital consequence, not an uplift lever** — it prices
+  what buffering supplier behaviour costs (or frees) and is deliberately kept
+  out of the EUR 136,972 uplift total.
+- The variable lead-time formula assumes demand and lead time are independent
+  and normal; **12 receipts per SKU is a small sample**, so the measured σ
+  carries estimation error a production system would smooth across a supplier's
+  SKUs. The 2-day grace window and the A–D grade bands are stated reporting
+  policies, not certifications.
+- Excel imports carry no procurement history, so the view reports itself
+  **unavailable** on imported datasets rather than inventing receipts (the
+  cross-sell pattern).
+
 ## Power BI pack
 
 `powerbi/` is a **Power BI Desktop showcase** generated from the platform: run
@@ -445,6 +516,7 @@ dip/crosssell.py   Apriori cross-sell rules (adapted from market-basket-analysis
 dip/forecast.py    Holt-Winters + rolling-origin MASE backtest
 dip/optimize.py    assortment MILP / elasticity pricing / OR-Tools CVRP
 dip/inventory.py   continuous-review (ROP, EOQ) policy — ABC-XYZ service targets
+dip/reliability.py supplier scorecards: measured lead times -> safety-stock cost
 dip/prescribe.py   composes the lifts into one plan + action cards
 dip/explain.py     "why this plan?" — binding constraints, moves, sensitivity
 dip/scenario.py    A/B compare: two named budget/guardrail scenarios + deltas

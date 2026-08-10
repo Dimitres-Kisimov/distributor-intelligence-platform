@@ -21,8 +21,8 @@ API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
        ``/api/margin-bridge`` ``/api/abc-xyz`` ``/api/rfm`` ``/api/revenue``
        ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
        ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
-       ``/api/inventory`` ``/api/sensitivity`` ``/api/scenario/compare`` (POST)
-       ``/api/reconcile``
+       ``/api/inventory`` ``/api/reliability`` ``/api/sensitivity``
+       ``/api/scenario/compare`` (POST) ``/api/reconcile``
        ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
@@ -57,6 +57,7 @@ from dip import (
     optimize,
     prescribe,
     reconcile,
+    reliability,
     scenario,
     sensitivity,
 )
@@ -116,6 +117,12 @@ def _build_cache(ds, routes: dict | None = None) -> dict:
     # serves from cache; the default-service result is cached, a ?service_level
     # override re-computes on the fly.
     cache["inventory"] = inventory.inventory_policy(ds, abc_xyz_result=cache["abc_xyz"])
+    # Supplier reliability measures the PO receipt history against the same
+    # ABC-XYZ service targets the inventory policy uses (the cached
+    # classification is shared), pricing what lead-time reality costs versus
+    # the vendor master. Imported datasets carry no receipts, so the engine
+    # reports itself unavailable there — the cross-sell pattern.
+    cache["reliability"] = reliability.supplier_reliability(ds, abc_xyz_result=cache["abc_xyz"])
     return cache
 
 
@@ -541,6 +548,40 @@ def api_inventory():
             source=st["source"],
         )
     except inventory.InventoryError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)
+
+
+@app.route("/api/reliability")
+def api_reliability():
+    """Supplier lead-time scorecards + the safety-stock EUR they cost.
+
+    Measured from the PO receipt history at the ABC-XYZ service targets the
+    inventory policy uses. The default (2-day on-time grace) result is served
+    from the per-dataset cache; ``?tolerance_days=<f>`` (days in [0, 30])
+    re-scores the on-time rates and grades on the fly — the safety-stock
+    arithmetic depends only on the receipts, so it is unchanged. 400 on a
+    non-numeric or out-of-range tolerance. On an imported workbook (which
+    carries no receipt history) the payload reports ``available: false``
+    instead of inventing receipts. Deterministic.
+    """
+    st = STATE
+    raw = request.args.get("tolerance_days")
+    if raw is None and st["source"].get("synthetic", True):
+        return jsonify(st["cache"]["reliability"])
+    tolerance_days = (
+        _float_arg("tolerance_days")  # rejects non-numeric / non-finite with 400
+        if raw is not None
+        else reliability.DEFAULT_TOLERANCE_DAYS
+    )
+    try:
+        result = reliability.supplier_reliability(
+            st["ds"],
+            tolerance_days=tolerance_days,
+            abc_xyz_result=st["cache"]["abc_xyz"],
+            source=st["source"],
+        )
+    except reliability.ReliabilityError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(result)
 

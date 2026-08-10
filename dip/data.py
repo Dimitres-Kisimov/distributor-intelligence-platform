@@ -16,6 +16,13 @@ Entities
   *after* every other entity so the added draws cannot disturb any previously
   published number — the KPI/forecast/optimiser figures are byte-identical to
   builds that predate this table.
+- ``suppliers`` + ``receipts``: ~10 suppliers (each SKU sources from exactly
+  one) and a purchase-order receipt history — 12 receipts per SKU with the
+  quoted vs the actually observed lead time — for the supplier-reliability
+  view. Generated *last*, after ``order_lines``, for the same reason: the
+  added draws are appended to the end of the rng stream, so every previously
+  published number (KPIs, forecast, optimisers, baskets) stays byte-identical
+  to builds that predate the supplier layer.
 """
 
 from __future__ import annotations
@@ -57,6 +64,32 @@ REGION_AFFINITY = 6.0
 BASKET_BASE_LINES = 3
 TIER_EXTRA_LINES = {"Key Account": 9.0, "Growth": 6.0, "Long Tail": 3.0}
 
+# ---- suppliers + purchase-order receipts (lead-time reliability) ------------
+# Each SKU sources from exactly one of ~10 suppliers; supplier share of the
+# catalogue is drawn once (Dirichlet) so portfolios differ in size. Every SKU
+# carries 12 PO receipts (one per month over the trailing year, a stated
+# modelling choice) recording the quoted lead time next to the actually
+# observed one. Each supplier has a hidden reliability profile — a bias
+# multiplier on the quoted lead time and a lead-time coefficient of variation
+# — that only drives generation: the reliability engine *measures* the receipt
+# history and never reads the profile, exactly as a real scorecard would.
+N_SUPPLIERS = 10
+RECEIPTS_PER_SKU = 12
+SUPPLIER_BIAS_RANGE = (0.92, 1.30)  # mean observed / quoted lead time
+SUPPLIER_CV_RANGE = (0.03, 0.30)  # lead-time coefficient of variation
+_SUPPLIER_NAMES = [
+    "Nordfelt Industrial",
+    "Baltic Components",
+    "Hansa Supply Co.",
+    "Ostrander Werke",
+    "Cormeau Freres",
+    "Vantaa Logistics",
+    "Silesia Parts",
+    "Tyrol Fastening",
+    "Delta Provisioning",
+    "Meridian Imports",
+]
+
 
 @dataclass
 class Dataset:
@@ -73,6 +106,13 @@ class Dataset:
     # whose template covers products only) — cross-sell mining then reports
     # itself unavailable instead of inventing baskets.
     order_lines: list[dict] | None = None
+    # Supplier master ({supplier_id, name}) and the column-oriented PO receipt
+    # history (sku_id, supplier_id, quoted_days, actual_days — one row per
+    # receipt). ``None`` means the dataset carries no procurement history
+    # (e.g. an Excel import) — the reliability scorecards then report
+    # themselves unavailable instead of inventing receipts.
+    suppliers: list[dict] | None = None
+    receipts: dict | None = None
 
     @property
     def n_months(self) -> int:
@@ -261,6 +301,48 @@ def _build_order_lines(
     return order_lines
 
 
+def _build_suppliers_and_receipts(
+    rng: np.random.Generator, skus: list[dict]
+) -> tuple[list[dict], dict]:
+    """Supplier master + a quoted-vs-actual PO receipt history per SKU.
+
+    Each supplier draws a hidden reliability profile (a bias multiplier on the
+    quoted lead time and a lead-time coefficient of variation) that drives
+    generation only — the reliability engine measures the receipts and never
+    reads the profile, the way a real scorecard measures deliveries rather
+    than trusting the vendor master. Called *last* in :func:`build_dataset`,
+    so the extra rng draws leave every previously generated number untouched.
+    """
+    suppliers = [
+        {"supplier_id": f"SUP-{i + 1:02d}", "name": _SUPPLIER_NAMES[i]}
+        for i in range(N_SUPPLIERS)
+    ]
+    bias = rng.uniform(*SUPPLIER_BIAS_RANGE, size=N_SUPPLIERS)
+    cv = rng.uniform(*SUPPLIER_CV_RANGE, size=N_SUPPLIERS)
+    # catalogue share per supplier drawn once, so portfolios differ in size
+    share = rng.dirichlet(np.full(N_SUPPLIERS, 3.0))
+
+    rows_sku, rows_supplier, rows_quoted, rows_actual = [], [], [], []
+    for sku in skus:
+        si = int(rng.choice(N_SUPPLIERS, p=share))
+        quoted = float(sku["lead_time_days"])
+        factors = np.maximum(0.25, rng.normal(bias[si], bias[si] * cv[si], size=RECEIPTS_PER_SKU))
+        actual = np.maximum(1.0, np.round(quoted * factors, 1))
+        for r in range(RECEIPTS_PER_SKU):
+            rows_sku.append(sku["sku_id"])
+            rows_supplier.append(suppliers[si]["supplier_id"])
+            rows_quoted.append(quoted)
+            rows_actual.append(float(actual[r]))
+
+    receipts = {
+        "sku_id": np.array(rows_sku),
+        "supplier_id": np.array(rows_supplier),
+        "quoted_days": np.array(rows_quoted, dtype=float),
+        "actual_days": np.array(rows_actual, dtype=float),
+    }
+    return suppliers, receipts
+
+
 def _build_route_stops(rng: np.random.Generator, customers: list[dict]) -> tuple[list[dict], dict]:
     """Pick a representative single-day delivery run: the highest-demand
     customers that ordered most recently, capped for a tractable CVRP."""
@@ -283,6 +365,10 @@ def build_dataset() -> Dataset:
     # stream, so every number generated above stays byte-identical to builds
     # that predate the cross-sell feature (pinned by a regression test).
     order_lines = _build_order_lines(rng, skus, customers, months)
+    # And the supplier/receipt draws are appended after *those*, for the same
+    # reason: baskets and every earlier number stay byte-identical to builds
+    # that predate the supplier-reliability feature (also pinned by tests).
+    suppliers, receipts = _build_suppliers_and_receipts(rng, skus)
     return Dataset(
         skus=skus,
         monthly=monthly,
@@ -291,6 +377,8 @@ def build_dataset() -> Dataset:
         depot=depot,
         months=months,
         order_lines=order_lines,
+        suppliers=suppliers,
+        receipts=receipts,
     )
 
 
@@ -300,3 +388,4 @@ if __name__ == "__main__":  # pragma: no cover - manual smoke check
     print(f"Customers: {len(ds.customers)}  route stops: {len(ds.route_stops)}")
     print(f"Total revenue: EUR {ds.monthly['revenue'].sum():,.0f}")
     print(f"Order baskets: {len(ds.order_lines)}")
+    print(f"Suppliers: {len(ds.suppliers)}  PO receipts: {len(ds.receipts['sku_id'])}")

@@ -21,6 +21,7 @@ from .forecast import forecast_revenue
 from .inventory import inventory_policy
 from .optimize import optimize_assortment, optimize_prices, optimize_routes
 from .prescribe import build_plan
+from .reliability import supplier_reliability
 from .scenario import compare_scenarios
 from .sensitivity import driver_sensitivity
 
@@ -41,4 +42,5 @@ __all__ = [
     "optimize_routes",
     "revenue_breakdown",
     "rfm_segments",
+    "supplier_reliability",
 ]

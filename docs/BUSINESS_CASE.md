@@ -41,6 +41,16 @@ figure the assortment MILP only proxies with a crude cycle-stock term. (It is a
 stocking *policy*, not an incremental-€ lever, so it is deliberately kept out of
 the uplift total below.)
 
+And the lead times that policy trusts are themselves unaudited: buffers are
+sized off the *quoted* lead time while suppliers deliver late — or early but
+erratically. Measuring the PO receipt history (10 suppliers, 2,400 receipts)
+shows the safety stock the vendor master implies (**EUR 16,282**) understates
+what measured lead-time behaviour actually requires (**EUR 18,626, +14.4%**) —
+and three quarters of that gap is lead-time *variability*, not average delay.
+The supplier scorecards put a EUR figure and a letter grade on each vendor, so
+the next supplier review argues about predictability with numbers. (Also a
+policy consequence, not an uplift lever — kept out of the total below.)
+
 ## Solution
 
 One platform that turns that ERP data into decisions:
@@ -52,6 +62,10 @@ One platform that turns that ERP data into decisions:
 - A continuous-review inventory policy (safety stock / reorder point / EOQ) that
   turns the ABC-XYZ classes and lead times into stocking decisions and the
   working capital they commit.
+- Supplier-reliability scorecards measured from the PO receipt history — on-time
+  rate, mean delay, lead-time variability — with the safety-stock EUR consequence
+  of each supplier's behaviour, split into a delay effect and a variability
+  effect.
 - A prescription layer that rolls the lifts into one number and a ranked set of
   action cards, exported as an executive PDF and Excel workbook.
 
@@ -74,7 +88,8 @@ discipline, not the software cost.
 - **Category / Merchandising** — owns the assortment-vs-capital trade-off.
 - **Logistics / Depot supervisor** — owns the routing plan.
 - **Purchasing / Inventory planner** — owns the safety-stock, reorder-point and
-  order-quantity policy and the service levels behind it.
+  order-quantity policy and the service levels behind it, plus the supplier
+  scorecards and what each vendor's lead-time behaviour costs in buffer stock.
 - **Finance** — owns the forecast, the working-capital budget, and the margin
   bridge.
 - **Managing Director** — reads the one-page expected-uplift view and the
