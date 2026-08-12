@@ -166,3 +166,18 @@ def test_dashboard_html_renders(client):
     # drill-down panels and the scenario-compare controls ship with the page
     for marker in (b"skuDrill", b"custDrill", b"pinScenario", b"compareBar"):
         assert marker in resp.data
+    # the six designed stations, including the inventory / reliability panels
+    # (fed by /api/inventory and /api/reliability) and the reconciliation
+    # proof strip (fed by /api/reconcile)
+    for marker in (
+        b"st-demand",
+        b"st-inventory",
+        b"st-reliability",
+        b"st-routing",
+        b"st-plan",
+        b"st-reconcile",
+        b"invCellTable",
+        b"relTable",
+        b"proofStrip",
+    ):
+        assert marker in resp.data

@@ -1,12 +1,13 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Executive Brief &middot; Distributor Intelligence Platform</title>
   <meta name="description" content="Executive brief for the Distributor Intelligence Platform: the honest headline KPIs and the machine-checked ledger tracing every one back to the engine field it comes from." />
+  <script>(function () { try { var t = localStorage.getItem("dip-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* theme falls back to prefers-color-scheme */ } })();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6bff'/%3E%3Ctext x='16' y='22' font-size='16' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EDI%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%2317191d'/%3E%3Ctext x='16' y='21' font-size='12' font-family='Consolas,monospace' font-weight='bold' fill='%23fdfdfb' text-anchor='middle'%3EDI%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
 {% set n_ids = rec.identities | length %}
@@ -25,11 +26,13 @@
       <a class="btn" href="/" title="Back to the live command-center dashboard">&larr; Command Center</a>
       <a class="btn" href="/api/reconcile" title="The same ledger as JSON">View JSON</a>
       <a class="btn primary" href="/api/export/pdf" title="The executive PDF, computed from the same plan">Executive PDF</a>
+      <button class="btn icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">&#9680;</button>
     </div>
   </header>
 
   <div class="content">
-    <!-- Verdict banner: the "no silent drift" property, made visible -->
+    <!-- Verdict: the "no silent drift" property as a designed proof strip —
+         one ticked cell per cross-engine identity, hover/focus for the claim -->
     <section class="verdict {{ 'ok' if rec.all_ok else 'fail' }}">
       <span class="v-mark">{{ '✓' if rec.all_ok else '✕' }}</span>
       <div class="v-body">
@@ -39,14 +42,22 @@
           {% if rec.readme_ok %}all {{ n_claims }} headline numbers present in the README{% else %}{{ rec.readme_missing | length }} headline number(s) missing from the README{% endif %}.
           Machine-checked by <code>dip.reconcile</code>; enforced in CI by <code>tests/test_reconcile.py</code>.
         </div>
+        <div class="proof-strip" role="list" aria-label="Cross-engine identity checks" style="margin-top:10px">
+          {% for i in rec.identities %}
+          <span class="p-cell {{ 'ok' if i.ok else 'fail' }}" role="listitem" tabindex="0" title="{{ i.statement }}">{{ '✓' if i.ok else '✕' }}</span>
+          {% endfor %}
+        </div>
       </div>
-      <span class="v-pill">seed {{ rec.seed }}</span>
+      <div class="v-strip">
+        <span class="proof-count">{{ n_ids_ok }}<span class="of">/{{ n_ids }}</span></span>
+        <span class="v-pill">seed {{ rec.seed }}</span>
+      </div>
     </section>
 
     <!-- Honest headline KPIs (each value pulled from a reconcile claim) -->
     <section class="kpi-row brief-kpis">
       {% for k in brief_kpis %}
-      <div class="kpi {{ k.accent }}">
+      <div class="kpi">
         <div class="label">{{ k.label }}</div>
         <div class="value">{{ k.claim.display }}</div>
         <div class="delta">{{ k.sub }}</div>
@@ -144,5 +155,20 @@
     </div>
   </div>
 </div>
+<script>
+  // Theme toggle only — the brief itself is server-rendered; no data is fetched here.
+  (function () {
+    var btn = document.getElementById("themeToggle");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var root = document.documentElement;
+      var sysDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var cur = root.getAttribute("data-theme") || (sysDark ? "dark" : "light");
+      var next = cur === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("dip-theme", next); } catch (e) { /* private mode */ }
+    });
+  })();
+</script>
 </body>
 </html>

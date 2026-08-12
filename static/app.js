@@ -1,27 +1,47 @@
 /* Distributor Intelligence Platform — front-end controller.
    All charts are hand-drawn on <canvas>; no charting library. Data comes from
-   the JSON API. Author: Dimitres Kisimov, 2026. */
+   the JSON API. Chart colors are read from the CSS design tokens at draw time,
+   so light and dark are both first-class (prefers-color-scheme + the manual
+   toggle) and every redraw follows the active theme.
+   Author: Dimitres Kisimov, 2026. */
 "use strict";
 
 /* ------------------------------------------------------------------ helpers */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-const PALETTE = { blue: "#2f6bff", green: "#1d9e6f", pink: "#ea4b71", amber: "#e8a33d" };
+
+const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
+/* validated categorical slots 1..8 (see style.css tokens); never cycled —
+   anything past slot 8 falls to the de-emphasis gray */
+function viz(n) { return cssVar("--viz-" + n); }
+function slotColor(i) { return i < 8 ? viz(i + 1) : cssVar("--mark-muted"); }
+
 function eur(n) {
   const a = Math.abs(n);
   if (a >= 1e6) return "€" + (n / 1e6).toFixed(2) + "M";
   if (a >= 1e3) return "€" + (n / 1e3).toFixed(0) + "k";
-  return "€" + Math.round(n).toLocaleString();
+  return "€" + (Math.round(n) || 0).toLocaleString(); // `|| 0` normalises -0
 }
-function eurFull(n) { return "€" + Math.round(n).toLocaleString("en-US"); }
+function eurFull(n) { return "€" + (Math.round(n) || 0).toLocaleString("en-US"); }
 function pct(n, d = 1) { return (n * 100).toFixed(d) + "%"; }
 function num(n) { return Math.round(n).toLocaleString("en-US"); }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+/* KPI typography: same text, with the currency symbol and magnitude/unit
+   suffix set small — the digits carry the tile. */
+function kpiHTML(s) {
+  const m = /^([+\-−]?)(€?)([\d.,]+)(.*)$/.exec(String(s));
+  if (!m) return esc(s);
+  const sign = m[1], cur = m[2], digits = m[3], rest = m[4].trim();
+  return (sign ? esc(sign) : "")
+    + (cur ? '<span class="u">' + esc(cur) + "</span>" : "")
+    + esc(digits)
+    + (rest ? '<span class="u">' + esc(rest) + "</span>" : "");
 }
 
 async function getJSON(url) {
@@ -43,6 +63,8 @@ function fitCanvas(canvas, cssHeight) {
   ctx.clearRect(0, 0, w, h);
   return { ctx, w, h };
 }
+const CHART_FONT = '11px system-ui, "Segoe UI", sans-serif';
+const CHART_FONT_BOLD = 'bold 11px system-ui, "Segoe UI", sans-serif';
 
 /* tooltip */
 const tip = $("#tooltip");
@@ -73,16 +95,27 @@ function niceTicks(min, max, count) {
 }
 
 /* ------------------------------------------------------------------ theme */
+function systemPrefersDark() {
+  return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function isDark() {
+  const t = document.documentElement.getAttribute("data-theme");
+  return t ? t === "dark" : systemPrefersDark();
+}
 function initTheme() {
-  const saved = localStorage.getItem("dip-theme") || "light";
-  document.documentElement.setAttribute("data-theme", saved);
+  // The head snippet already applied any stored preference before first paint;
+  // with no stored choice the page follows prefers-color-scheme.
   $("#themeToggle").addEventListener("click", () => {
-    const cur = document.documentElement.getAttribute("data-theme");
-    const next = cur === "dark" ? "light" : "dark";
+    const next = isDark() ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
-    localStorage.setItem("dip-theme", next);
-    renderAll(); // redraw canvases with new colors
+    try { localStorage.setItem("dip-theme", next); } catch (e) { /* private mode */ }
+    renderAll(); // redraw canvases with the new tokens
   });
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (!document.documentElement.getAttribute("data-theme")) renderAll();
+    });
+  }
 }
 
 /* ------------------------------------------------------------------ nav */
@@ -90,7 +123,7 @@ function initNav() {
   $$(".nav-item").forEach((item) => {
     item.addEventListener("click", () => {
       const t = document.getElementById(item.dataset.target);
-      if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (t) t.scrollIntoView({ behavior: REDUCED_MOTION ? "auto" : "smooth", block: "start" });
     });
   });
   const secs = $$(".nav-item").map((i) => document.getElementById(i.dataset.target)).filter(Boolean);
@@ -108,20 +141,42 @@ function initNav() {
 }
 
 /* ------------------------------------------------------------------ state */
-const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, crosssell: null, crossProduct: "", crossRecs: null, kpiDrilldown: null, kpiDrillOpen: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
+const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, crosssell: null, crossProduct: "", crossRecs: null, kpiDrilldown: null, kpiDrillOpen: null, inventory: null, reliability: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
 
 /* ------------------------------------------------------------------ KPIs */
 function renderKPIs() {
   const k = STATE.kpis, p = STATE.plan;
-  $("#kpi-revenue").textContent = eur(k.revenue);
-  $("#kpi-margin").textContent = pct(k.gross_margin_pct);
+  $("#kpi-revenue").innerHTML = kpiHTML(eur(k.revenue));
+  $("#kpi-margin").innerHTML = kpiHTML(pct(k.gross_margin_pct));
   $("#kpi-margin-sub").textContent = eur(k.gross_margin) + " gross margin";
-  $("#kpi-yoy").textContent = (k.yoy >= 0 ? "+" : "") + pct(k.yoy);
+  $("#kpi-yoy").innerHTML = kpiHTML((k.yoy >= 0 ? "+" : "") + pct(k.yoy));
   $("#kpi-yoy-sub").className = "delta " + (k.yoy >= 0 ? "up" : "down");
   $("#kpi-yoy-sub").textContent = "last 12 vs prior 12";
-  $("#kpi-uplift").textContent = eur(p.expected_uplift_eur);
+  $("#kpi-uplift").innerHTML = kpiHTML(eur(p.expected_uplift_eur));
   $("#kpi-uplift-sub").textContent = pct(p.expected_uplift_pct) + " of annual gross margin";
-  $("#kpi-otif").textContent = pct(k.otif);
+  $("#kpi-otif").innerHTML = kpiHTML(pct(k.otif));
+  renderRevenueSpark();
+}
+
+/* 24-month revenue trend inside the Revenue tile: the series in the
+   de-emphasis gray, the current month as an accent end-dot. */
+function renderRevenueSpark() {
+  const canvas = $("#kpiRevenueSpark");
+  const series = STATE.kpis && STATE.kpis.revenue_series;
+  if (!canvas || !series || series.length < 2) return;
+  const { ctx, w, h } = fitCanvas(canvas, 26);
+  const min = Math.min(...series), max = Math.max(...series);
+  const X = (i) => 2 + (i / (series.length - 1)) * (w - 8);
+  const Y = (v) => 3 + (1 - (v - min) / (max - min || 1)) * (h - 8);
+  ctx.strokeStyle = cssVar("--mark-muted");
+  ctx.lineWidth = 1.5; ctx.lineJoin = "round";
+  ctx.beginPath();
+  series.forEach((v, i) => (i === 0 ? ctx.moveTo(X(i), Y(v)) : ctx.lineTo(X(i), Y(v))));
+  ctx.stroke();
+  const lx = X(series.length - 1), ly = Y(series[series.length - 1]);
+  ctx.fillStyle = viz(1);
+  ctx.beginPath(); ctx.arc(lx, ly, 2.5, 0, 7); ctx.fill();
+  ctx.strokeStyle = cssVar("--panel"); ctx.lineWidth = 1.5; ctx.stroke();
 }
 
 /* ------------------------------------------------------------ forecast chart */
@@ -137,45 +192,48 @@ function renderForecast() {
   const ymax = Math.max(...allVals) * 1.08, ymin = Math.min(0, ...allVals);
   const X = (i) => padL + (i / (n - 1)) * (w - padL - padR);
   const Y = (v) => padT + (1 - (v - ymin) / (ymax - ymin)) * (h - padT - padB);
-  const line = cssVar("--line"), muted = cssVar("--muted");
+  const grid = cssVar("--grid"), muted = cssVar("--muted");
+  const cActual = viz(1), cForecast = viz(2);
 
-  // gridlines + y labels
-  ctx.font = "11px -apple-system, Segoe UI, sans-serif";
+  // gridlines + y labels (hairline, recessive)
+  ctx.font = CHART_FONT;
   ctx.textBaseline = "middle";
   niceTicks(ymin, ymax, 5).forEach((t) => {
     if (t < ymin) return;
-    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(padL, Y(t)); ctx.lineTo(w - padR, Y(t)); ctx.stroke();
     ctx.fillStyle = muted; ctx.textAlign = "right";
     ctx.fillText(eur(t), padL - 8, Y(t));
   });
 
-  // forecast band
+  // forecast band — a wash of the forecast hue, never a saturated block
   ctx.beginPath();
   for (let i = 0; i < fc.length; i++) { const x = X(hist.length + i); const y = Y(up[i]); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
   for (let i = fc.length - 1; i >= 0; i--) ctx.lineTo(X(hist.length + i), Y(lo[i]));
   ctx.closePath();
-  ctx.fillStyle = "rgba(29,158,111,0.16)"; ctx.fill();
+  ctx.globalAlpha = 0.14; ctx.fillStyle = cForecast; ctx.fill(); ctx.globalAlpha = 1;
 
   // actual line
-  ctx.lineWidth = 2.4; ctx.lineJoin = "round";
-  ctx.strokeStyle = PALETTE.blue; ctx.beginPath();
+  ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  ctx.strokeStyle = cActual; ctx.beginPath();
   hist.forEach((v, i) => (i === 0 ? ctx.moveTo(X(i), Y(v)) : ctx.lineTo(X(i), Y(v))));
   ctx.stroke();
 
-  // connector + forecast line (dashed)
-  ctx.strokeStyle = PALETTE.green; ctx.setLineDash([6, 5]); ctx.beginPath();
+  // connector + forecast line (dashed = projection)
+  ctx.strokeStyle = cForecast; ctx.setLineDash([6, 5]); ctx.beginPath();
   ctx.moveTo(X(hist.length - 1), Y(hist[hist.length - 1]));
   fc.forEach((v, i) => ctx.lineTo(X(hist.length + i), Y(v)));
   ctx.stroke(); ctx.setLineDash([]);
 
-  // dots
+  // dots with a surface ring so they stay legible where they cross the line
+  const ring = cssVar("--panel");
   const pts = [];
   hist.forEach((v, i) => { pts.push({ x: X(i), y: Y(v), v, label: f.history_months[i], type: "actual" }); });
   fc.forEach((v, i) => { pts.push({ x: X(hist.length + i), y: Y(v), v, label: f.forecast_months[i], type: "forecast", lo: lo[i], up: up[i] }); });
   pts.forEach((p) => {
-    ctx.fillStyle = p.type === "actual" ? PALETTE.blue : PALETTE.green;
+    ctx.fillStyle = p.type === "actual" ? cActual : cForecast;
     ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, 7); ctx.fill();
+    ctx.strokeStyle = ring; ctx.lineWidth = 1.5; ctx.stroke();
   });
 
   // x labels (every 3rd)
@@ -189,7 +247,7 @@ function renderForecast() {
     let best = null, bd = 1e9;
     pts.forEach((p) => { const d = Math.abs(p.x - mx); if (d < bd) { bd = d; best = p; } });
     if (best && bd < 26) {
-      let html = `<b>${best.label}</b><br>${best.type === "actual" ? "Actual" : "Forecast"}: ${eurFull(best.v)}`;
+      let html = `<b>${esc(best.label)}</b><br>${best.type === "actual" ? "Actual" : "Forecast"}: ${eurFull(best.v)}`;
       if (best.type === "forecast") html += `<br>Band: ${eur(best.lo)}–${eur(best.up)}`;
       showTip(e.clientX, e.clientY, html);
     } else hideTip();
@@ -205,13 +263,13 @@ function renderBreakdown() {
   if (!rb) return;
   const rows = rb[STATE.breakdownDim];
   const max = Math.max(...rows.map((r) => r.revenue));
-  const colors = [PALETTE.blue, PALETTE.green, PALETTE.amber, PALETTE.pink, "#7b61ff", "#00b3b3", "#e8a33d", "#5a6b8c"];
+  // one nominal series -> one hue; the row label carries identity
   $("#breakdownBars").innerHTML = rows
     .map(
-      (r, i) => `
+      (r) => `
       <div class="bar-row">
-        <span title="${r.label}">${r.label}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${(r.revenue / max) * 100}%;background:${colors[i % colors.length]}"></div></div>
+        <span title="${esc(r.label)}">${esc(r.label)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${(r.revenue / max) * 100}%"></div></div>
         <span class="bar-val">${eur(r.revenue)}</span>
       </div>`
     )
@@ -236,51 +294,80 @@ function renderMargin() {
     else { const base = run; run += it.value; bars.push({ ...it, base: Math.min(base, run), top: Math.max(base, run) }); }
   });
   const ymax = Math.max(...bars.map((b) => b.top)) * 1.1, ymin = 0;
-  const bw = (w - padL - padR) / items.length * 0.6;
+  const bw = Math.min(24, (w - padL - padR) / items.length * 0.6);
   const gap = (w - padL - padR) / items.length;
   const Y = (v) => padT + (1 - (v - ymin) / (ymax - ymin)) * (h - padT - padB);
-  const line = cssVar("--line"), muted = cssVar("--muted"), ink = cssVar("--ink");
+  const grid = cssVar("--grid"), muted = cssVar("--muted"), ink = cssVar("--ink");
+  const cUp = cssVar("--up"), cDown = cssVar("--down");
+  const tUp = cssVar("--up-text"), tDown = cssVar("--down-text");
 
-  ctx.font = "11px -apple-system, Segoe UI, sans-serif"; ctx.textBaseline = "middle";
+  ctx.font = CHART_FONT; ctx.textBaseline = "middle";
   niceTicks(ymin, ymax, 4).forEach((t) => {
-    ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(padL, Y(t)); ctx.lineTo(w - padR, Y(t)); ctx.stroke();
+    ctx.strokeStyle = grid; ctx.beginPath(); ctx.moveTo(padL, Y(t)); ctx.lineTo(w - padR, Y(t)); ctx.stroke();
     ctx.fillStyle = muted; ctx.textAlign = "right"; ctx.fillText(eur(t), padL - 8, Y(t));
   });
 
   bars.forEach((b, i) => {
     const x = padL + i * gap + (gap - bw) / 2;
     const yTop = Y(b.top), yBase = Y(b.base);
-    let color = ink;
-    if (b.type === "delta") color = b.value >= 0 ? PALETTE.green : PALETTE.pink;
+    let color = ink, labelColor = muted;
+    if (b.type === "delta") {
+      color = b.value >= 0 ? cUp : cDown;
+      labelColor = b.value >= 0 ? tUp : tDown;
+    }
     ctx.fillStyle = color;
     ctx.beginPath();
-    const rr = 4, ht = Math.max(2, yBase - yTop);
-    ctx.roundRect(x, yTop, bw, ht, rr); ctx.fill();
-    // connector line
+    const rr = 3, ht = Math.max(2, yBase - yTop);
+    // rounded data-end, square at the running baseline
+    const radii = b.type === "delta" && b.value < 0 ? [0, 0, rr, rr] : [rr, rr, 0, 0];
+    ctx.roundRect(x, yTop, bw, ht, radii); ctx.fill();
+    // hairline connector to the next bar
     if (i < bars.length - 1) {
-      ctx.strokeStyle = muted; ctx.setLineDash([3, 3]);
-      const yc = b.type === "total" ? Y(b.value) : Y(run === b.top ? b.top : b.top);
-      ctx.beginPath(); ctx.moveTo(x + bw, Y(b.type === "total" ? b.value : (b.value >= 0 ? b.top : b.base)));
-      ctx.lineTo(x + gap, Y(b.type === "total" ? b.value : (b.value >= 0 ? b.top : b.base))); ctx.stroke();
-      ctx.setLineDash([]); void yc;
+      const yc = Y(b.type === "total" ? b.value : (b.value >= 0 ? b.top : b.base));
+      ctx.strokeStyle = cssVar("--line-strong"); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + bw, yc); ctx.lineTo(x + gap, yc); ctx.stroke();
     }
-    // label + value
+    // label + value (values wear text tokens, not the mark color)
     ctx.fillStyle = muted; ctx.textAlign = "center"; ctx.textBaseline = "top";
     ctx.fillText(b.label, x + bw / 2, h - padB + 8);
-    ctx.fillStyle = color; ctx.textBaseline = "bottom"; ctx.font = "bold 11px -apple-system, Segoe UI, sans-serif";
+    ctx.fillStyle = b.type === "total" ? cssVar("--text") : labelColor;
+    ctx.textBaseline = "bottom"; ctx.font = CHART_FONT_BOLD;
     const vtxt = (b.type === "delta" && b.value >= 0 ? "+" : "") + eur(b.value);
     ctx.fillText(vtxt, x + bw / 2, yTop - 4);
-    ctx.font = "11px -apple-system, Segoe UI, sans-serif"; ctx.textBaseline = "middle";
+    ctx.font = CHART_FONT; ctx.textBaseline = "middle";
   });
 }
 
 /* ------------------------------------------------------------ ABC-XYZ heatmap */
+/* Sequential = one hue, light->dark by revenue; the anchor flips in dark mode
+   so "near zero" always recedes toward the surface. Steps come from the
+   documented blue ramp; the in-cell label picks ink or paper by contrast. */
+const SEQ_LIGHT = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#5598e7", "#256abf", "#184f95"];
+const SEQ_DARK = ["#0d366b", "#104281", "#184f95", "#1c5cab", "#256abf", "#5598e7", "#9ec5f4"];
+
+function relLum(hex) {
+  const c = [1, 3, 5].map((i) => {
+    let v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+function contrastRatio(a, b) {
+  const la = relLum(a), lb = relLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+function cellText(bg) {
+  const dark = "#17191d", light = "#f5f7fa";
+  return contrastRatio(bg, dark) >= contrastRatio(bg, light) ? dark : light;
+}
+
 function renderHeat() {
   const az = STATE.abc;
   if (!az) return;
   const grid = az.grid;
   const maxRev = Math.max(...Object.values(grid).map((g) => g.revenue));
   const abc = ["A", "B", "C"], xyz = ["X", "Y", "Z"];
+  const ramp = isDark() ? SEQ_DARK : SEQ_LIGHT;
   const el = $("#heat");
   let html = `<div class="corner"></div>` + xyz.map((x) => `<div class="h-col">${x}</div>`).join("");
   abc.forEach((a) => {
@@ -288,10 +375,9 @@ function renderHeat() {
     xyz.forEach((x) => {
       const cell = grid[a + x];
       const t = maxRev ? cell.revenue / maxRev : 0;
-      // blue→green scale by revenue intensity
-      const alpha = 0.18 + t * 0.82;
-      const bg = `color-mix(in srgb, ${PALETTE.blue} ${Math.round(alpha * 100)}%, ${PALETTE.green} ${Math.round((1 - alpha) * 40)}%)`;
-      html += `<div class="cell" role="button" tabindex="0" data-cell="${a + x}" style="background:${bg}" data-tip="${a + x}: ${cell.count} SKUs · ${eurFull(cell.revenue)} — click for the SKU list">
+      const bg = ramp[Math.round(t * (ramp.length - 1))];
+      const fg = cellText(bg);
+      html += `<div class="cell" role="button" tabindex="0" data-cell="${a + x}" style="background:${bg};color:${fg}" data-tip="${a + x}: ${cell.count} SKUs · ${eurFull(cell.revenue)} — click for the SKU list">
         <span class="c-name">${a + x}</span>
         <span class="c-count">${cell.count}</span>
         <span class="c-rev">${eur(cell.revenue)}</span>
@@ -300,7 +386,7 @@ function renderHeat() {
   });
   el.innerHTML = html;
   $$("#heat .cell").forEach((c) => {
-    c.addEventListener("mousemove", (e) => showTip(e.clientX, e.clientY, c.dataset.tip));
+    c.addEventListener("mousemove", (e) => showTip(e.clientX, e.clientY, esc(c.dataset.tip)));
     c.addEventListener("mouseleave", hideTip);
     c.addEventListener("click", () => toggleSkuDrill(c.dataset.cell));
     c.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSkuDrill(c.dataset.cell); } });
@@ -331,9 +417,9 @@ function renderSkuDrill() {
     rows
       .map(
         (s) => `<tr>
-          <td>${s.sku_id}</td>
-          <td>${s.name}</td>
-          <td>${s.category}</td>
+          <td class="mono">${esc(s.sku_id)}</td>
+          <td>${esc(s.name)}</td>
+          <td>${esc(s.category)}</td>
           <td class="num">${eurFull(s.revenue)}</td>
           <td class="num">${s.cv.toFixed(2)}</td>
         </tr>`
@@ -360,8 +446,8 @@ function renderCustDrill() {
     rows
       .map(
         (c) => `<tr>
-          <td>${c.name} <span class="dim">${c.customer_id}</span></td>
-          <td>${c.r}·${c.f}·${c.m}</td>
+          <td>${esc(c.name)} <span class="dim mono">${esc(c.customer_id)}</span></td>
+          <td class="mono">${c.r}·${c.f}·${c.m}</td>
           <td>${c.recency_months === 0 ? "this month" : c.recency_months + " mo ago"}</td>
           <td class="num">${c.frequency}</td>
           <td class="num">${eurFull(c.monetary)}</td>
@@ -447,8 +533,8 @@ function crossRows(rules) {
     return `<tr><td colspan="7" class="dim">No association rules clear the thresholds here.</td></tr>`;
   }
   return rules.map((r) => `<tr>
-      <td><b>${esc(r.antecedent)}</b> <span class="dim">${esc(r.antecedent_name)}</span></td>
-      <td><b>${esc(r.consequent)}</b> <span class="dim">${esc(r.consequent_name)}</span></td>
+      <td><b class="mono">${esc(r.antecedent)}</b> <span class="dim">${esc(r.antecedent_name)}</span></td>
+      <td><b class="mono">${esc(r.consequent)}</b> <span class="dim">${esc(r.consequent_name)}</span></td>
       <td>${esc(r.consequent_category)}</td>
       <td class="num">${pct(r.support)}</td>
       <td class="num">${pct(r.confidence, 0)}</td>
@@ -505,12 +591,12 @@ function renderRFM() {
   if (!rfm) return;
   const segs = rfm.segments;
   const max = Math.max(...segs.map((s) => s.monetary));
-  const cmap = { Champions: PALETTE.green, Loyal: PALETTE.blue, "New / Promising": PALETTE.amber, "At Risk (high value)": PALETTE.pink, "Needs Attention": "#7b61ff", Hibernating: "#5a6b8c" };
+  // one nominal series -> one hue; the segment name carries identity
   $("#rfmBars").innerHTML = segs
     .map(
-      (s) => `<div class="bar-row clickable" role="button" tabindex="0" data-segment="${s.segment}" title="${s.segment} — click for the customer list">
-        <span>${s.segment}</span>
-        <div class="bar-track"><div class="bar-fill" style="width:${(s.monetary / max) * 100}%;background:${cmap[s.segment] || PALETTE.blue}"></div></div>
+      (s) => `<div class="bar-row clickable" role="button" tabindex="0" data-segment="${esc(s.segment)}" title="${esc(s.segment)} — click for the customer list">
+        <span>${esc(s.segment)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${(s.monetary / max) * 100}%"></div></div>
         <span class="bar-val">${s.count} · ${eur(s.monetary)}</span>
       </div>`
     )
@@ -527,7 +613,7 @@ function renderRoutes() {
   const r = STATE.routes;
   if (!r) return;
   const canvas = $("#routeChart");
-  const { ctx, w, h } = fitCanvas(canvas, 260);
+  const { ctx, w, h } = fitCanvas(canvas, 280);
   const routes = STATE.routeMode === "optimized" ? r.routes : r.baseline_routes;
   // bounds from all stops
   const pts = [];
@@ -538,27 +624,35 @@ function renderRoutes() {
   const pad = 22;
   const sx = (x) => pad + ((x - minX) / (maxX - minX || 1)) * (w - 2 * pad);
   const sy = (y) => (h - pad) - ((y - minY) / (maxY - minY || 1)) * (h - 2 * pad);
-  const routeColors = [PALETTE.blue, PALETTE.green, PALETTE.pink, PALETTE.amber, "#7b61ff", "#00b3b3", "#e8557f", "#3a7bd5"];
+  const ring = cssVar("--panel");
 
-  // routes
+  // routes — fixed categorical slots, one per vehicle, never cycled
   routes.forEach((rt, i) => {
-    const c = routeColors[i % routeColors.length];
-    ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    const c = slotColor(i);
+    ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.lineCap = "round";
     ctx.beginPath();
     rt.stops.forEach((s, j) => { const x = sx(s.x), y = sy(s.y); j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
     ctx.stroke();
-    // customer dots
+    // customer dots with a surface ring
     rt.stops.forEach((s) => {
       if (s.id === "DEPOT") return;
       ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx(s.x), sy(s.y), 4, 0, 7); ctx.fill();
-      ctx.strokeStyle = cssVar("--panel"); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = ring; ctx.lineWidth = 2; ctx.stroke();
     });
   });
   // depot
   const dx = sx(r.depot.x), dy = sy(r.depot.y);
   ctx.fillStyle = cssVar("--ink");
   ctx.beginPath(); ctx.roundRect(dx - 6, dy - 6, 12, 12, 3); ctx.fill();
-  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = ring; ctx.lineWidth = 2; ctx.stroke();
+
+  // per-vehicle legend — identity never rides on color alone
+  $("#routeLegend").innerHTML = routes
+    .map((rt, i) => {
+      const stops = rt.stops.filter((s) => s.id !== "DEPOT").length;
+      return `<span class="lg"><span class="sw" style="background:${slotColor(i)}"></span>Vehicle ${i + 1} · ${stops} stops</span>`;
+    })
+    .join("");
 
   // stats — labels follow the selected mode so the three numbers share a frame
   const optimized = STATE.routeMode === "optimized";
@@ -577,7 +671,7 @@ function renderRoutes() {
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
     let best = null, bd = 1e9;
     allStops.forEach((s) => { const d = Math.hypot(s.x2 - mx, s.y2 - my); if (d < bd) { bd = d; best = s; } });
-    if (best && bd < 14) showTip(e.clientX, e.clientY, `<b>${best.name || best.id}</b><br>Vehicle ${best.veh + 1}`);
+    if (best && bd < 14) showTip(e.clientX, e.clientY, `<b>${esc(best.name || best.id)}</b><br>Vehicle ${best.veh + 1}`);
     else hideTip();
   };
   canvas.onmouseleave = hideTip;
@@ -593,26 +687,27 @@ function renderAssort() {
   $("#assort-pill").textContent = "MILP · " + eur(a.milp.margin);
   $("#budgetLabel").textContent = eurFull(a.budget) + " / " + eurFull(a.full_capital);
 
-  // before/after bar: full-range margin potential vs MILP vs greedy
+  // emphasis form: the optimiser is the point, the heuristic is context
   const canvas = $("#assortChart");
   const { ctx, w, h } = fitCanvas(canvas, 150);
   const rows = [
-    { label: "MILP (optimal)", val: a.milp.margin, color: PALETTE.blue },
-    { label: "Greedy baseline", val: a.greedy.margin, color: PALETTE.amber },
+    { label: "MILP (optimal)", val: a.milp.margin, color: viz(1) },
+    { label: "Greedy baseline", val: a.greedy.margin, color: cssVar("--mark-muted") },
   ];
   const max = Math.max(rows[0].val, rows[1].val) * 1.15;
-  const padL = 110, padR = 70, barH = 26, gap = 22, top = 18;
+  const padL = 110, padR = 70, barH = 22, gap = 24, top = 20;
   const muted = cssVar("--muted");
-  ctx.font = "12px -apple-system, Segoe UI, sans-serif"; ctx.textBaseline = "middle";
+  ctx.font = CHART_FONT; ctx.textBaseline = "middle";
   rows.forEach((r, i) => {
     const y = top + i * (barH + gap);
     ctx.fillStyle = muted; ctx.textAlign = "left"; ctx.fillText(r.label, 0, y + barH / 2);
-    ctx.fillStyle = cssVar("--panel-2"); ctx.beginPath(); ctx.roundRect(padL, y, w - padL - padR, barH, 6); ctx.fill();
+    ctx.fillStyle = cssVar("--panel-2"); ctx.beginPath(); ctx.roundRect(padL, y, w - padL - padR, barH, 3); ctx.fill();
     const bw = ((r.val / max) * (w - padL - padR));
-    ctx.fillStyle = r.color; ctx.beginPath(); ctx.roundRect(padL, y, bw, barH, 6); ctx.fill();
-    ctx.fillStyle = cssVar("--text"); ctx.textAlign = "left"; ctx.font = "bold 12px -apple-system, Segoe UI, sans-serif";
+    // rounded data-end, square at the baseline
+    ctx.fillStyle = r.color; ctx.beginPath(); ctx.roundRect(padL, y, bw, barH, [0, 3, 3, 0]); ctx.fill();
+    ctx.fillStyle = cssVar("--text"); ctx.textAlign = "left"; ctx.font = CHART_FONT_BOLD;
     ctx.fillText(eur(r.val), padL + bw + 8, y + barH / 2);
-    ctx.font = "12px -apple-system, Segoe UI, sans-serif";
+    ctx.font = CHART_FONT;
   });
 }
 
@@ -1005,27 +1100,162 @@ function updateExportLinks() {
 function renderActions() {
   const p = STATE.plan;
   $("#actions-total").textContent = "Σ " + eur(p.expected_uplift_eur) + " / yr";
-  const colors = { Pricing: PALETTE.blue, Assortment: PALETTE.green, Logistics: PALETTE.amber, Forecast: PALETTE.pink };
+  // each lever keeps its fixed categorical slot (identity, never re-ranked)
+  const leverSlot = { Pricing: 1, Assortment: 3, Logistics: 2, Forecast: 5 };
   $("#actions").innerHTML = p.cards
     .map(
-      (c) => `<div class="action">
-        <div class="rail" style="background:${colors[c.lever] || PALETTE.blue}"></div>
+      (c) => {
+        const v = "var(--viz-" + (leverSlot[c.lever] || 1) + ")";
+        return `<div class="action">
+        <div class="rail" style="background:${v}"></div>
         <div>
-          <div class="lever" style="color:${colors[c.lever] || PALETTE.blue}">${c.lever}</div>
-          <div class="a-title">${c.title}</div>
-          <div class="a-detail">${c.detail}</div>
+          <div class="lever"><span class="ldot" style="background:${v}"></span>${esc(c.lever)}</div>
+          <div class="a-title">${esc(c.title)}</div>
+          <div class="a-detail">${esc(c.detail)}</div>
         </div>
-        <div class="a-impact"><div class="n">${c.impact_eur > 0 ? eur(c.impact_eur) : "—"}</div><div class="c">${c.confidence} confidence</div></div>
-      </div>`
+        <div class="a-impact"><div class="n">${c.impact_eur > 0 ? eur(c.impact_eur) : "—"}</div><div class="c">${esc(c.confidence)} confidence</div></div>
+      </div>`;
+      }
     )
     .join("");
+}
+
+/* ------------------------------------------------------ ST-02 · inventory */
+/* Replenishment policy from /api/inventory: portfolio totals as stat tiles,
+   the ABC-XYZ service-cell roll-up as a table, and the engine's own note and
+   caveats verbatim — the honesty labels ship with the payload. */
+const CELL_ORDER = ["AX", "AY", "AZ", "BX", "BY", "BZ", "CX", "CY", "CZ"];
+
+function renderInventory() {
+  const inv = STATE.inventory;
+  if (!inv) return;
+  const t = inv.totals;
+  $("#invPill").textContent = num(t.n_skus) + " SKUs · targets from the ABC-XYZ matrix";
+  $("#invInfo").title = inv.note;
+  $("#invTiles").innerHTML = [
+    { l: "Working capital", v: eur(t.working_capital_eur), s: "average inventory value" },
+    { l: "Safety stock", v: eur(t.safety_stock_eur), s: "cycle stock " + eur(t.cycle_stock_eur) },
+    { l: "Inventory turns", v: t.inventory_turns.toFixed(2) + "×", s: "annual COGS ÷ working capital" },
+    { l: "Days of cover", v: t.days_of_cover.toFixed(1) + " d", s: "portfolio average" },
+    { l: "Cycle service", v: pct(t.demand_weighted_service_level), s: "fill rate " + pct(t.demand_weighted_fill_rate) + " · demand-weighted" },
+    { l: "Annual policy cost", v: eur(t.annual_inventory_cost_eur), s: "holding + ordering" },
+  ].map((x) => `<div class="mini"><div class="m-label">${esc(x.l)}</div><div class="m-value">${kpiHTML(x.v)}</div><div class="m-sub">${esc(x.s)}</div></div>`).join("");
+
+  const byCell = {};
+  inv.by_cell.forEach((c) => { byCell[c.cell] = c; });
+  $("#invCellTable").innerHTML =
+    `<tr><th title="A/B/C = revenue tier · X/Y/Z = demand stability">Cell</th><th class="num">SKUs</th>` +
+    `<th class="num" title="Cycle-service-level target this cell is planned to">Target CSL</th>` +
+    `<th class="num" title="Expected demand-weighted fill rate under the policy">Fill rate</th>` +
+    `<th class="num">Safety stock</th><th class="num">Working capital</th></tr>` +
+    CELL_ORDER.filter((c) => byCell[c]).map((cname) => {
+      const c = byCell[cname];
+      return `<tr>
+        <td class="mono">${esc(c.cell)}</td>
+        <td class="num">${c.count}</td>
+        <td class="num">${c.target_service_level != null ? pct(c.target_service_level, 0) : "—"}</td>
+        <td class="num">${c.avg_fill_rate != null ? pct(c.avg_fill_rate) : "—"}</td>
+        <td class="num">${eurFull(c.safety_stock_eur)}</td>
+        <td class="num">${eurFull(c.working_capital_eur)}</td>
+      </tr>`;
+    }).join("");
+
+  $("#invFoot").textContent = inv.note;
+  const caveats = (inv.caveats || []).concat(inv.provenance ? [inv.provenance] : []);
+  if (caveats.length) {
+    $("#invCaveatList").innerHTML = caveats.map((c) => `<li>${esc(c)}</li>`).join("");
+    $("#invCaveats").hidden = false;
+  }
+}
+
+/* ---------------------------------------------------- ST-03 · reliability */
+/* Supplier scorecards from /api/reliability. The letter grade is the encoding
+   (color reinforces it); on-time rides a meter next to its figure; the
+   safety-stock delta is signed and typeset like every other money column. */
+function renderReliability() {
+  const rel = STATE.reliability;
+  if (!rel) return;
+  const pill = $("#relPill"), table = $("#relTable");
+  if (!rel.available) {
+    pill.textContent = "unavailable on imported data";
+    $("#relTiles").innerHTML = "";
+    table.innerHTML = `<tr><td class="dim">${esc(rel.note)}</td></tr>`;
+    $("#relFoot").textContent = rel.provenance || "";
+    return;
+  }
+  const t = rel.totals, p = rel.params;
+  pill.textContent = t.n_suppliers + " suppliers · " + num(t.n_receipts) + " receipts";
+  $("#relInfo").title = rel.note;
+  const sgnEur = (v) => (v >= 0 ? "+" : "−") + eur(Math.abs(v));
+  $("#relTiles").innerHTML = [
+    { l: "On-time (weighted)", v: pct(t.on_time_rate), s: "grace " + p.tolerance_days + " d" },
+    { l: "Δ safety stock", v: sgnEur(t.delta_eur), s: "measured vs quoted lead times", cls: t.delta_eur > 0 ? "delta-pos" : "delta-neg" },
+    { l: "Delay effect", v: sgnEur(t.delay_effect_eur), s: "average lead time vs vendor master" },
+    { l: "Variability effect", v: sgnEur(t.variability_effect_eur), s: "lead-time wobble" },
+    { l: "Extra holding cost", v: sgnEur(t.extra_holding_cost_eur), s: "at " + pct(p.holding_rate, 0) + "/yr holding" },
+  ].map((x) => `<div class="mini"><div class="m-label">${esc(x.l)}</div><div class="m-value${x.cls ? " " + x.cls : ""}">${kpiHTML(x.v)}</div><div class="m-sub">${esc(x.s)}</div></div>`).join("");
+
+  const bands = p.grade_bands;
+  const gradeTitle = `on-time ≥ ${pct(bands.A, 0)} = A · ≥ ${pct(bands.B, 0)} = B · ≥ ${pct(bands.C, 0)} = C · below = D`;
+  table.innerHTML =
+    `<tr><th>Supplier</th><th class="mid" title="${esc(gradeTitle)}">Grade</th>` +
+    `<th class="num" title="Share of receipts within the quoted lead time + ${p.tolerance_days}-day grace">On-time</th>` +
+    `<th class="num" title="Average quoted lead time → average measured lead time, in days">Quoted → measured</th>` +
+    `<th class="num" title="Mean delay vs the vendor master, in days">Delay</th>` +
+    `<th class="num" title="Coefficient of variation of the measured lead time">CV</th>` +
+    `<th class="num" title="Safety-stock consequence of measured vs quoted lead times at the same service targets — positive = more capital required">Δ safety stock</th>` +
+    `<th class="num">Receipts</th></tr>` +
+    rel.suppliers.map((s) => `<tr>
+      <td>${esc(s.name)} <span class="dim mono">${esc(s.supplier_id)}</span></td>
+      <td class="mid"><span class="grade g${esc(s.grade)}" title="${esc(gradeTitle)}">${esc(s.grade)}</span></td>
+      <td class="num"><span class="meter"><span class="mt"><span class="mf" style="width:${Math.round(s.on_time_rate * 100)}%"></span></span>${pct(s.on_time_rate, 0)}</span></td>
+      <td class="num">${s.avg_quoted_days.toFixed(1)} → ${s.avg_actual_days.toFixed(1)} d</td>
+      <td class="num">${(s.mean_delay_days >= 0 ? "+" : "−") + Math.abs(s.mean_delay_days).toFixed(1)} d</td>
+      <td class="num">${s.lead_time_cv.toFixed(2)}</td>
+      <td class="num ${s.delta_eur > 0 ? "delta-pos" : "delta-neg"}">${sgnEur(s.delta_eur)}</td>
+      <td class="num">${s.n_receipts}${s.thin_sample ? ` <span class="badge-thin" title="Fewer than ${p.thin_sample_receipts} receipts — measured statistics are unstable">thin</span>` : ""}</td>
+    </tr>`).join("");
+
+  $("#relFoot").textContent = rel.note;
+  const caveats = (rel.caveats || []).concat(rel.provenance ? [rel.provenance] : []);
+  if (caveats.length) {
+    $("#relCaveatList").innerHTML = caveats.map((c) => `<li>${esc(c)}</li>`).join("");
+    $("#relCaveats").hidden = false;
+  }
+}
+
+/* ---------------------------------------------------- ST-06 · proof strip */
+/* The reconciliation guard as a checklist object: one cell per cross-engine
+   identity, verdict and counts straight from /api/reconcile (the same ledger
+   the executive brief renders). Fetched after the main load — the first call
+   computes the ledger server-side, so the strip fills in when it lands. */
+function renderProof(rec) {
+  const n = rec.identities.length;
+  const nOk = rec.identities.filter((i) => i.ok).length;
+  $("#proofCount").innerHTML = `${nOk}<span class="of">/${n}</span>`;
+  $("#proofStrip").innerHTML = rec.identities
+    .map((i) => `<span class="p-cell ${i.ok ? "ok" : "fail"}" role="listitem" tabindex="0" title="${esc(i.statement)}">${i.ok ? "✓" : "✕"}</span>`)
+    .join("");
+  $("#proofPill").textContent = rec.all_ok ? "no silent drift · seed " + rec.seed : "drift found · seed " + rec.seed;
+  $("#proofMeta").innerHTML =
+    `<b>${nOk}/${n}</b> cross-engine identities hold · <b>${rec.claims.length}</b> headline numbers traced to their engine fields · ` +
+    (rec.readme_ok ? `all present in the README` : `${rec.readme_missing.length} missing from the README`) +
+    ` · measured on the ${esc(rec.data_label)}`;
+}
+
+async function loadProof() {
+  try {
+    renderProof(await getJSON("/api/reconcile"));
+  } catch (err) {
+    $("#proofMeta").textContent = "Could not load the reconciliation ledger (" + (err && err.message ? err.message : "network error") + ") — the executive brief has the full ledger.";
+  }
 }
 
 /* ------------------------------------------------------------ render all */
 function renderAll() {
   renderKPIs(); renderForecast(); renderBreakdown(); renderMargin();
   renderHeat(); renderRFM(); renderRoutes(); renderAssort(); renderActions();
-  renderCrosssell(); renderKpiDrill();
+  renderCrosssell(); renderKpiDrill(); renderInventory(); renderReliability();
 }
 
 /* ------------------------------------------------------------ focused views */
@@ -1038,7 +1268,8 @@ function applyFocusView() {
   const el = document.getElementById(f.sec);
   if (!el) return;
   document.title = f.title + " — Distributor Intelligence Platform";
-  $$(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.target === f.sec));
+  const station = el.closest(".station");
+  $$(".nav-item").forEach((n) => n.classList.toggle("active", station && n.dataset.target === station.id));
   el.classList.add("focus-card");
   requestAnimationFrame(() => el.scrollIntoView({ behavior: "auto", block: "start" }));
 }
@@ -1047,7 +1278,7 @@ function applyFocusView() {
 async function loadData() {
   // no budget param: the server answers with its default (40% of full capital),
   // so the first render can never drift from the server-side definition.
-  const [forecast, margin, abc, rfm, revenue, routes, assort, crosssell, kpiDrilldown] = await Promise.all([
+  const [forecast, margin, abc, rfm, revenue, routes, assort, crosssell, kpiDrilldown, inventory, reliability] = await Promise.all([
     getJSON("/api/forecast"),
     getJSON("/api/margin-bridge"),
     getJSON("/api/abc-xyz"),
@@ -1057,14 +1288,18 @@ async function loadData() {
     getJSON("/api/optimize/assortment"),
     getJSON("/api/crosssell?top=50"),
     getJSON("/api/kpis/drilldown"),
+    getJSON("/api/inventory"),
+    getJSON("/api/reliability"),
   ]);
   STATE.forecast = forecast; STATE.margin = margin; STATE.abc = abc;
   STATE.rfm = rfm; STATE.revenue = revenue; STATE.routes = routes; STATE.assort = assort;
   STATE.crosssell = crosssell; STATE.kpiDrilldown = kpiDrilldown;
+  STATE.inventory = inventory; STATE.reliability = reliability;
   // sync slider to the server-reported budget share
   $("#budgetSlider").value = Math.round((assort.budget / assort.full_capital) * 100);
   $("#loadError").hidden = true;
   renderAll();
+  loadProof(); // non-blocking: the strip fills in when the ledger lands
 }
 
 function showLoadError(err) {

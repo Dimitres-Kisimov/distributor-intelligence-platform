@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Distributor Intelligence Platform</title>
   <meta name="description" content="Decision-intelligence command center for a distributor: KPIs, forecast, margin, assortment, pricing and delivery routing in one place." />
-  <link rel="preconnect" href="/" />
+  <script>(function () { try { var t = localStorage.getItem("dip-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) { /* theme falls back to prefers-color-scheme */ } })();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6bff'/%3E%3Ctext x='16' y='22' font-size='16' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EDI%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%2317191d'/%3E%3Ctext x='16' y='21' font-size='12' font-family='Consolas,monospace' font-weight='bold' fill='%23fdfdfb' text-anchor='middle'%3EDI%3C/text%3E%3C/svg%3E" />
 </head>
 <body>
 <div class="app">
@@ -19,17 +19,14 @@
         <div class="sub">Intelligence Platform</div>
       </div>
     </div>
-    <a class="nav-item active" data-target="sec-overview"><span class="dot"></span> Overview</a>
-    <a class="nav-item" data-target="sec-forecast"><span class="dot"></span> Demand forecast</a>
-    <a class="nav-item" data-target="sec-margin"><span class="dot"></span> Margin bridge</a>
-    <a class="nav-item" data-target="sec-portfolio"><span class="dot"></span> Portfolio (ABC-XYZ)</a>
-    <a class="nav-item" data-target="sec-assortment"><span class="dot"></span> Assortment</a>
-    <a class="nav-item" data-target="sec-routes"><span class="dot"></span> Delivery routes</a>
-    <a class="nav-item" data-target="sec-segments"><span class="dot"></span> Customer segments</a>
-    <a class="nav-item" data-target="sec-crosssell"><span class="dot"></span> Cross-sell</a>
-    <a class="nav-item" data-target="sec-actions"><span class="dot"></span> Recommended actions</a>
-    <a class="nav-item" data-target="sec-scenario"><span class="dot"></span> Scenario A/B</a>
-    <a class="nav-item" data-target="sec-why"><span class="dot"></span> Why this plan?</a>
+    <a class="nav-item active" data-target="sec-overview"><span class="code">00</span> Overview</a>
+    <div class="nav-group">Stations</div>
+    <a class="nav-item" data-target="st-demand"><span class="code">01</span> Demand</a>
+    <a class="nav-item" data-target="st-inventory"><span class="code">02</span> Inventory</a>
+    <a class="nav-item" data-target="st-reliability"><span class="code">03</span> Reliability</a>
+    <a class="nav-item" data-target="st-routing"><span class="code">04</span> Routing</a>
+    <a class="nav-item" data-target="st-plan"><span class="code">05</span> Plan</a>
+    <a class="nav-item" data-target="st-reconcile"><span class="code">06</span> Reconcile</a>
     <div class="nav-spacer"></div>
     <div class="nav-foot">
       {% if source and not source.synthetic %}Your data: {{ source.filename }} ({{ source.n_skus }} SKUs).{% else %}Synthetic data, generated deterministically.{% endif %}<br />
@@ -50,7 +47,7 @@
         <a class="btn" id="briefLink" href="/reconcile" title="Executive brief: every headline number traced to its engine source, with the cross-engine consistency check shown">Reconciliation</a>
         <a class="btn" id="exportExcel" href="/api/export/excel" title="Workbook computed for the budget and guardrail currently selected on screen">Export Excel</a>
         <a class="btn primary" id="exportPdf" href="/api/export/pdf" title="PDF computed for the budget and guardrail currently selected on screen">Executive PDF</a>
-        <button class="btn icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">◐</button>
+        <button class="btn icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">&#9680;</button>
       </div>
     </header>
 
@@ -76,7 +73,7 @@
       </div>
       <!-- Board summary -->
       <section class="board-summary" id="boardSummary">
-        <div class="bs-text" id="boardSummaryText">—</div>
+        <div class="bs-text" id="boardSummaryText">&mdash;</div>
         <button class="btn" id="pinScenario" type="button" title="Pin the plan currently on screen, then change the budget or guardrail to compare scenarios side by side">Pin scenario</button>
         <button class="btn" id="copySummary" type="button" title="Copy this summary to the clipboard">Copy</button>
       </section>
@@ -85,20 +82,20 @@
       <section class="compare" id="compareBar" hidden>
         <div class="cmp-col">
           <div class="cmp-tag">Pinned</div>
-          <div class="cmp-scenario" id="cmpPinnedScenario">—</div>
-          <div class="cmp-uplift" id="cmpPinnedUplift">—</div>
-          <div class="cmp-levers" id="cmpPinnedLevers">—</div>
+          <div class="cmp-scenario" id="cmpPinnedScenario">&mdash;</div>
+          <div class="cmp-uplift" id="cmpPinnedUplift">&mdash;</div>
+          <div class="cmp-levers" id="cmpPinnedLevers">&mdash;</div>
         </div>
         <div class="cmp-col">
           <div class="cmp-tag">Current</div>
-          <div class="cmp-scenario" id="cmpCurrentScenario">—</div>
-          <div class="cmp-uplift" id="cmpCurrentUplift">—</div>
-          <div class="cmp-levers" id="cmpCurrentLevers">—</div>
+          <div class="cmp-scenario" id="cmpCurrentScenario">&mdash;</div>
+          <div class="cmp-uplift" id="cmpCurrentUplift">&mdash;</div>
+          <div class="cmp-levers" id="cmpCurrentLevers">&mdash;</div>
         </div>
         <div class="cmp-col cmp-delta">
           <div class="cmp-tag">&Delta; uplift (modelled)</div>
-          <div class="cmp-uplift" id="cmpDelta">—</div>
-          <div class="cmp-levers" id="cmpDeltaLevers">—</div>
+          <div class="cmp-uplift" id="cmpDelta">&mdash;</div>
+          <div class="cmp-levers" id="cmpDeltaLevers">&mdash;</div>
           <div class="cmp-note" title="Both scenarios reuse the same startup routing solve; only pricing and assortment are re-optimised per scenario.">routing identical in both scenarios <span class="info">?</span></div>
         </div>
         <button class="btn" id="unpinScenario" type="button" title="Remove the pinned scenario">Unpin</button>
@@ -114,27 +111,28 @@
       <section id="sec-overview" class="kpi-row">
         <div class="kpi clickable" id="kpiRevenueTile" role="button" tabindex="0" title="Click for the revenue drill-down by region × channel segment — the segments sum to this headline exactly">
           <div class="label">Revenue (24 mo) <span class="info">?</span></div>
-          <div class="value" id="kpi-revenue">—</div>
-          <div class="delta" id="kpi-revenue-sub">gross of returns · click to drill down</div>
+          <div class="value" id="kpi-revenue">&mdash;</div>
+          <div class="delta" id="kpi-revenue-sub">gross of returns &middot; click to drill down</div>
+          <canvas class="spark" id="kpiRevenueSpark" height="26" aria-hidden="true"></canvas>
         </div>
-        <div class="kpi green clickable" id="kpiMarginTile" role="button" tabindex="0" title="Click for the gross-margin drill-down by category — the categories sum to this headline exactly">
+        <div class="kpi clickable" id="kpiMarginTile" role="button" tabindex="0" title="Click for the gross-margin drill-down by category — the categories sum to this headline exactly">
           <div class="label">Gross margin <span class="info">?</span></div>
-          <div class="value" id="kpi-margin">—</div>
-          <div class="delta" id="kpi-margin-sub">—</div>
+          <div class="value" id="kpi-margin">&mdash;</div>
+          <div class="delta" id="kpi-margin-sub">&mdash;</div>
         </div>
-        <div class="kpi amber">
+        <div class="kpi">
           <div class="label">YoY growth</div>
-          <div class="value" id="kpi-yoy">—</div>
+          <div class="value" id="kpi-yoy">&mdash;</div>
           <div class="delta" id="kpi-yoy-sub">last 12 vs prior 12</div>
         </div>
-        <div class="kpi pink" title="Sum of the three modelled levers (pricing, routing, assortment) for the budget and guardrail selected below. Recomputes live when you move either control.">
+        <div class="kpi" title="Sum of the three modelled levers (pricing, routing, assortment) for the budget and guardrail selected below. Recomputes live when you move either control.">
           <div class="label">Expected uplift <span class="info">?</span></div>
-          <div class="value" id="kpi-uplift">—</div>
+          <div class="value" id="kpi-uplift">&mdash;</div>
           <div class="delta up" id="kpi-uplift-sub">from the plan</div>
         </div>
         <div class="kpi" title="Modelled estimate derived from average SKU lead times in the synthetic dataset — not a measured operational service level.">
           <div class="label">OTIF service <span class="info">?</span></div>
-          <div class="value" id="kpi-otif">—</div>
+          <div class="value" id="kpi-otif">&mdash;</div>
           <div class="delta" id="kpi-otif-sub">modelled from lead times</div>
         </div>
       </section>
@@ -142,7 +140,7 @@
       <!-- KPI drill-down (hidden until a headline tile is clicked) -->
       <section class="card" id="kpiDrillCard" hidden>
         <div class="card-head">
-          <div class="card-title" id="kpiDrillTitle">—</div>
+          <div class="card-title" id="kpiDrillTitle">&mdash;</div>
           <div class="head-controls">
             <span class="card-note" id="kpiDrillNote">segments sum to the headline exactly</span>
             <button class="btn drill-close" id="kpiDrillClose" type="button">Close</button>
@@ -153,226 +151,337 @@
         </div>
       </section>
 
-      <div class="grid">
-        <!-- Revenue + forecast -->
-        <div class="card col-8" id="sec-forecast">
-          <div class="card-head">
-            <div class="card-title">Revenue &amp; demand forecast</div>
-            <span class="pill blue has-info" id="forecast-pill" title="MASE = mean absolute scaled error from a rolling-origin backtest on this data. Below 1.0 beats a seasonal-naive forecast; 0.38 means roughly 62% less error than naive.">MASE —</span>
+      <!-- ═══ ST-01 · DEMAND ═══ -->
+      <section class="station" id="st-demand">
+        <header class="station-head">
+          <span class="st-code">ST-01</span>
+          <h2 class="st-name">Demand</h2>
+          <span class="st-desc">forecast &middot; revenue mix &middot; portfolio classification &middot; customers</span>
+        </header>
+        <div class="grid">
+          <!-- Revenue + forecast -->
+          <div class="card col-8" id="sec-forecast">
+            <div class="card-head">
+              <div class="card-title">Revenue &amp; demand forecast</div>
+              <span class="pill blue has-info" id="forecast-pill" title="MASE = mean absolute scaled error from a rolling-origin backtest on this data. Below 1.0 beats a seasonal-naive forecast; 0.38 means roughly 62% less error than naive.">MASE &mdash;</span>
+            </div>
+            <canvas id="forecastChart" height="300"></canvas>
+            <div class="legend">
+              <span class="lg"><span class="sw line sw-1"></span> Actual revenue</span>
+              <span class="lg"><span class="sw line sw-2"></span> Holt-Winters forecast</span>
+              <span class="lg"><span class="sw sw-band"></span> ~80% band</span>
+            </div>
           </div>
-          <canvas id="forecastChart" height="300"></canvas>
-          <div class="legend">
-            <span class="lg"><span class="sw" style="background:#2f6bff"></span> Actual revenue</span>
-            <span class="lg"><span class="sw" style="background:#1d9e6f"></span> Holt-Winters forecast</span>
-            <span class="lg"><span class="sw" style="background:rgba(29,158,111,.25)"></span> ~80% band</span>
-          </div>
-        </div>
 
-        <!-- Revenue by region/category -->
-        <div class="card col-4">
-          <div class="card-head">
-            <div class="card-title">Revenue by region</div>
-            <div class="seg" id="breakdownSeg">
-              <button class="active" data-dim="region">Region</button>
-              <button data-dim="category">Category</button>
-              <button data-dim="channel">Channel</button>
-            </div>
-          </div>
-          <div class="bars" id="breakdownBars"></div>
-        </div>
-
-        <!-- Margin waterfall -->
-        <div class="card col-7" id="sec-margin">
-          <div class="card-head">
-            <div class="card-title">Gross-margin bridge (H1 → H2)</div>
-            <span class="card-note has-info" title="Classic price / volume / mix walk between the two halves of the horizon. The Price step is €0 by construction: list prices are static in this synthetic dataset, so the change is driven by volume and mix.">volume / mix / price walk &middot; Price is €0 here (static list prices) <span class="info">?</span></span>
-          </div>
-          <canvas id="marginChart" height="280"></canvas>
-        </div>
-
-        <!-- ABC-XYZ heatmap -->
-        <div class="card col-5" id="sec-portfolio">
-          <div class="card-head">
-            <div class="card-title">Portfolio ABC-XYZ</div>
-            <span class="card-note">revenue Pareto × demand variability</span>
-          </div>
-          <div class="heat" id="heat"></div>
-          <div class="legend">
-            <span class="lg">A/B/C = revenue tier &middot; X/Y/Z = demand stability &middot; click a cell for its SKUs</span>
-          </div>
-          <div class="drill" id="skuDrill" hidden>
-            <div class="drill-head">
-              <span class="drill-title" id="skuDrillTitle">—</span>
-              <button class="btn drill-close" id="skuDrillClose" type="button">Close</button>
-            </div>
-            <div class="drill-scroll">
-              <table class="drill-table" id="skuDrillTable"></table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Assortment optimiser -->
-        <div class="card col-7" id="sec-assortment">
-          <div class="card-head">
-            <div class="card-title">Assortment optimiser (MILP vs greedy) <span class="info" title="MILP = mixed-integer optimiser: the provably best SKU selection under the budget. Greedy = a sensible rule-of-thumb baseline (best margin-per-capital first). The uplift shown is the optimiser's edge over that already-sensible heuristic, not the total value of assortment planning.">?</span></div>
-            <span class="pill" id="assort-pill">—</span>
-          </div>
-          <div class="slider-wrap">
-            <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);font-weight:600">
-              <span title="Capital tied up in inventory for the SKUs carried. Moving this re-runs the assortment optimiser and recomputes the whole plan (headline uplift + actions).">Working-capital budget</span>
-              <span id="budgetLabel">—</span>
-            </div>
-            <input type="range" id="budgetSlider" min="15" max="100" value="40" step="1" />
-            <div class="stat-pair">
-              <div class="s"><span class="n" id="assort-count">—</span><span class="l">SKUs carried</span></div>
-              <div class="s"><span class="n" id="assort-margin">—</span><span class="l">margin captured (MILP)</span></div>
-              <div class="s" title="The optimiser's edge over the greedy rule-of-thumb at this budget — honest lift over an already-sensible baseline."><span class="n" style="color:var(--green)" id="assort-uplift">—</span><span class="l">vs greedy baseline</span></div>
-            </div>
-          </div>
-          <canvas id="assortChart" height="150" style="margin-top:14px"></canvas>
-        </div>
-
-        <!-- Delivery routes -->
-        <div class="card col-5" id="sec-routes">
-          <div class="card-head">
-            <div class="card-title">Delivery routing</div>
-            <div class="seg" id="routeSeg">
-              <button class="active" data-mode="optimized" title="OR-Tools CVRP solver — the recommended plan">Optimised</button>
-              <button data-mode="baseline" title="Nearest-neighbour heuristic — how routes are typically built by hand today">Current practice</button>
-            </div>
-          </div>
-          <canvas id="routeChart" height="260"></canvas>
-          <div class="stat-pair">
-            <div class="s"><span class="n" id="route-km">—</span><span class="l" id="route-km-l">km this run</span></div>
-            <div class="s"><span class="n" style="color:var(--green)" id="route-saved">—</span><span class="l" id="route-saved-l">km saved if optimised</span></div>
-            <div class="s" title="The solver minimises kilometres, not vehicle count — the optimised plan may use more vans to drive fewer km."><span class="n" id="route-veh">—</span><span class="l">vehicles <span class="info">?</span></span></div>
-          </div>
-        </div>
-
-        <!-- Customer segments -->
-        <div class="card col-5" id="sec-segments">
-          <div class="card-head">
-            <div class="card-title">Customer segments (RFM)</div>
-            <span class="card-note">by monetary value &middot; click a segment for its customers</span>
-          </div>
-          <div class="bars" id="rfmBars"></div>
-          <div class="drill" id="custDrill" hidden>
-            <div class="drill-head">
-              <span class="drill-title" id="custDrillTitle">—</span>
-              <button class="btn drill-close" id="custDrillClose" type="button">Close</button>
-            </div>
-            <div class="drill-scroll">
-              <table class="drill-table" id="custDrillTable"></table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recommended actions -->
-        <div class="card col-7" id="sec-actions">
-          <div class="card-head">
-            <div class="card-title">Recommended actions</div>
-            <div class="head-controls">
-              <div class="seg" id="guardSeg" title="Price guardrail: the maximum price move allowed per SKU. Re-runs the pricing engine and recomputes the plan.">
-                <button data-mc="0.05">±5%</button>
-                <button data-mc="0.1">±10%</button>
-                <button class="active" data-mc="0.15">±15%</button>
+          <!-- Revenue by region/category -->
+          <div class="card col-4">
+            <div class="card-head">
+              <div class="card-title">Revenue by region</div>
+              <div class="seg" id="breakdownSeg">
+                <button class="active" data-dim="region">Region</button>
+                <button data-dim="category">Category</button>
+                <button data-dim="channel">Channel</button>
               </div>
-              <span class="pill green" id="actions-total">—</span>
             </div>
+            <div class="bars" id="breakdownBars"></div>
           </div>
-          <div class="actions" id="actions"></div>
-        </div>
 
-        <!-- Cross-sell associations (market-basket mining on synthetic baskets) -->
-        <div class="card col-12" id="sec-crosssell">
-          <div class="card-head">
-            <div class="card-title">Cross-sell: what sells together <span class="info" title="Association rules (Apriori) mined from the synthetic order baskets — one basket per customer order event. Lift above 1 means the two SKUs share a basket more often than independence would predict. Co-occurrence, not causation: a real campaign still needs an A/B test.">?</span></div>
-            <div class="head-controls">
-              <select class="select" id="crossProduct" title="Narrow the rules to one product (only SKUs with at least one rule above the thresholds are listed)">
-                <option value="">All products</option>
-              </select>
-              <span class="pill blue" id="crossPill">—</span>
+          <!-- Margin waterfall -->
+          <div class="card col-7" id="sec-margin">
+            <div class="card-head">
+              <div class="card-title">Gross-margin bridge (H1 &rarr; H2)</div>
+              <span class="card-note has-info" title="Classic price / volume / mix walk between the two halves of the horizon. The Price step is €0 by construction: list prices are static in this synthetic dataset, so the change is driven by volume and mix.">volume / mix / price walk &middot; Price is &euro;0 here (static list prices) <span class="info">?</span></span>
             </div>
+            <canvas id="marginChart" height="280"></canvas>
           </div>
-          <div class="drill-scroll cross-scroll">
-            <table class="drill-table" id="crossTable"></table>
-          </div>
-          <div class="legend"><span class="lg" id="crossNote">—</span></div>
-        </div>
 
-        <!-- Scenario compare (A vs B) — server-side POST /api/scenario/compare.
-             Two named budget/guardrail scenarios compared in one deterministic
-             call; the same A/B table is written to the workbook's Scenarios sheet. -->
-        <div class="card col-12" id="sec-scenario">
-          <div class="card-head">
-            <div class="card-title">Scenario compare (A vs B) <span class="info" title="Runs the optimiser under two named budget / price-guardrail scenarios server-side (POST /api/scenario/compare) over the same dataset, and shows each scenario's KPIs with the absolute and % deltas. Deterministic; routing is solved once and shared across both scenarios, so the uplift delta is driven by pricing and assortment. The same A/B table is exported to the workbook's Scenarios sheet.">?</span></div>
-            <button class="btn primary" id="runScenarioCompare" type="button" title="Run the A/B compare on the server for the two scenarios below">Compare A vs B</button>
-          </div>
-          <div class="scenario-form">
-            <div class="sc-side">
-              <div class="sc-tag">Scenario A</div>
-              <div class="sc-ctrl">
-                <div class="sc-row"><span>Working-capital budget</span><span id="scABudgetLabel">40%</span></div>
-                <input type="range" id="scABudget" min="15" max="100" value="40" step="1" />
+          <!-- ABC-XYZ heatmap -->
+          <div class="card col-5" id="sec-portfolio">
+            <div class="card-head">
+              <div class="card-title">Portfolio ABC-XYZ</div>
+              <span class="card-note">revenue Pareto &times; demand variability</span>
+            </div>
+            <div class="heat" id="heat"></div>
+            <div class="legend">
+              <span class="lg">A/B/C = revenue tier &middot; X/Y/Z = demand stability &middot; click a cell for its SKUs</span>
+            </div>
+            <div class="drill" id="skuDrill" hidden>
+              <div class="drill-head">
+                <span class="drill-title" id="skuDrillTitle">&mdash;</span>
+                <button class="btn drill-close" id="skuDrillClose" type="button">Close</button>
               </div>
-              <div class="sc-row"><span>Price guardrail</span>
-                <div class="seg" id="scAGuard">
-                  <button data-mc="0.05">±5%</button>
-                  <button data-mc="0.1">±10%</button>
-                  <button class="active" data-mc="0.15">±15%</button>
+              <div class="drill-scroll">
+                <table class="drill-table" id="skuDrillTable"></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Customer segments -->
+          <div class="card col-5" id="sec-segments">
+            <div class="card-head">
+              <div class="card-title">Customer segments (RFM)</div>
+              <span class="card-note">by monetary value &middot; click a segment for its customers</span>
+            </div>
+            <div class="bars" id="rfmBars"></div>
+            <div class="drill" id="custDrill" hidden>
+              <div class="drill-head">
+                <span class="drill-title" id="custDrillTitle">&mdash;</span>
+                <button class="btn drill-close" id="custDrillClose" type="button">Close</button>
+              </div>
+              <div class="drill-scroll">
+                <table class="drill-table" id="custDrillTable"></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cross-sell associations (market-basket mining on synthetic baskets) -->
+          <div class="card col-7" id="sec-crosssell">
+            <div class="card-head">
+              <div class="card-title">Cross-sell: what sells together <span class="info" title="Association rules (Apriori) mined from the synthetic order baskets — one basket per customer order event. Lift above 1 means the two SKUs share a basket more often than independence would predict. Co-occurrence, not causation: a real campaign still needs an A/B test.">?</span></div>
+              <div class="head-controls">
+                <select class="select" id="crossProduct" title="Narrow the rules to one product (only SKUs with at least one rule above the thresholds are listed)">
+                  <option value="">All products</option>
+                </select>
+                <span class="pill blue" id="crossPill">&mdash;</span>
+              </div>
+            </div>
+            <div class="drill-scroll cross-scroll">
+              <table class="drill-table" id="crossTable"></table>
+            </div>
+            <div class="legend"><span class="lg" id="crossNote">&mdash;</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ ST-02 · INVENTORY ═══ -->
+      <section class="station" id="st-inventory">
+        <header class="station-head">
+          <span class="st-code">ST-02</span>
+          <h2 class="st-name">Inventory</h2>
+          <span class="st-desc">replenishment policy &middot; working capital &middot; assortment under budget</span>
+        </header>
+        <div class="grid">
+          <!-- Replenishment policy (consumes /api/inventory) -->
+          <div class="card col-7" id="sec-inventory">
+            <div class="card-head">
+              <div class="card-title">Replenishment policy (ROP &middot; EOQ) <span class="info" id="invInfo" title="Continuous-review policy: safety stock, reorder point and order quantity per SKU, service targets from the ABC-XYZ matrix.">?</span></div>
+              <span class="pill plain" id="invPill">&mdash;</span>
+            </div>
+            <div class="mini-tiles" id="invTiles"></div>
+            <div class="drill-scroll">
+              <table class="drill-table" id="invCellTable"></table>
+            </div>
+            <div class="station-note" id="invFoot">&mdash;</div>
+            <details class="caveats" id="invCaveats" hidden>
+              <summary>Assumptions &amp; caveats</summary>
+              <ul id="invCaveatList"></ul>
+            </details>
+          </div>
+
+          <!-- Assortment optimiser -->
+          <div class="card col-5" id="sec-assortment">
+            <div class="card-head">
+              <div class="card-title">Assortment optimiser (MILP vs greedy) <span class="info" title="MILP = mixed-integer optimiser: the provably best SKU selection under the budget. Greedy = a sensible rule-of-thumb baseline (best margin-per-capital first). The uplift shown is the optimiser's edge over that already-sensible heuristic, not the total value of assortment planning.">?</span></div>
+              <span class="pill plain" id="assort-pill">&mdash;</span>
+            </div>
+            <div class="slider-wrap">
+              <div class="slider-row">
+                <span title="Capital tied up in inventory for the SKUs carried. Moving this re-runs the assortment optimiser and recomputes the whole plan (headline uplift + actions).">Working-capital budget</span>
+                <span id="budgetLabel">&mdash;</span>
+              </div>
+              <input type="range" id="budgetSlider" min="15" max="100" value="40" step="1" />
+              <div class="stat-pair">
+                <div class="s"><span class="n" id="assort-count">&mdash;</span><span class="l">SKUs carried</span></div>
+                <div class="s"><span class="n" id="assort-margin">&mdash;</span><span class="l">margin captured (MILP)</span></div>
+                <div class="s" title="The optimiser's edge over the greedy rule-of-thumb at this budget — honest lift over an already-sensible baseline."><span class="n up" id="assort-uplift">&mdash;</span><span class="l">vs greedy baseline</span></div>
+              </div>
+            </div>
+            <canvas id="assortChart" height="150" style="margin-top:14px"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ ST-03 · RELIABILITY ═══ -->
+      <section class="station" id="st-reliability">
+        <header class="station-head">
+          <span class="st-code">ST-03</span>
+          <h2 class="st-name">Reliability</h2>
+          <span class="st-desc">supplier lead times, measured &middot; what they cost in safety stock</span>
+        </header>
+        <div class="grid">
+          <!-- Supplier scorecards (consumes /api/reliability) -->
+          <div class="card col-12" id="sec-reliability">
+            <div class="card-head">
+              <div class="card-title">Supplier scorecards <span class="info" id="relInfo" title="Measured from the PO receipt history; safety-stock consequences priced at the same ABC-XYZ service targets the inventory policy uses.">?</span></div>
+              <span class="pill plain" id="relPill">&mdash;</span>
+            </div>
+            <div class="mini-tiles" id="relTiles"></div>
+            <div class="drill-scroll">
+              <table class="drill-table" id="relTable"></table>
+            </div>
+            <div class="station-note" id="relFoot">&mdash;</div>
+            <details class="caveats" id="relCaveats" hidden>
+              <summary>Assumptions &amp; caveats</summary>
+              <ul id="relCaveatList"></ul>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ ST-04 · ROUTING ═══ -->
+      <section class="station" id="st-routing">
+        <header class="station-head">
+          <span class="st-code">ST-04</span>
+          <h2 class="st-name">Routing</h2>
+          <span class="st-desc">CVRP delivery plan vs current practice</span>
+        </header>
+        <div class="grid">
+          <!-- Delivery routes -->
+          <div class="card col-12" id="sec-routes">
+            <div class="card-head">
+              <div class="card-title">Delivery routing</div>
+              <div class="seg" id="routeSeg">
+                <button class="active" data-mode="optimized" title="OR-Tools CVRP solver — the recommended plan">Optimised</button>
+                <button data-mode="baseline" title="Nearest-neighbour heuristic — how routes are typically built by hand today">Current practice</button>
+              </div>
+            </div>
+            <div class="route-layout">
+              <div>
+                <canvas id="routeChart" height="280"></canvas>
+                <div class="route-legend" id="routeLegend"></div>
+              </div>
+              <div class="route-side">
+                <div class="s"><span class="n" id="route-km">&mdash;</span><span class="l" id="route-km-l">km this run</span></div>
+                <div class="s"><span class="n up" id="route-saved">&mdash;</span><span class="l" id="route-saved-l">km saved if optimised</span></div>
+                <div class="s" title="The solver minimises kilometres, not vehicle count — the optimised plan may use more vans to drive fewer km."><span class="n" id="route-veh">&mdash;</span><span class="l">vehicles <span class="info">?</span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ ST-05 · PLAN ═══ -->
+      <section class="station" id="st-plan">
+        <header class="station-head">
+          <span class="st-code">ST-05</span>
+          <h2 class="st-name">Plan</h2>
+          <span class="st-desc">the levers, priced &middot; scenarios &middot; why this plan</span>
+        </header>
+        <div class="grid">
+          <!-- Recommended actions -->
+          <div class="card col-7" id="sec-actions">
+            <div class="card-head">
+              <div class="card-title">Recommended actions</div>
+              <div class="head-controls">
+                <div class="seg" id="guardSeg" title="Price guardrail: the maximum price move allowed per SKU. Re-runs the pricing engine and recomputes the plan.">
+                  <button data-mc="0.05">&plusmn;5%</button>
+                  <button data-mc="0.1">&plusmn;10%</button>
+                  <button class="active" data-mc="0.15">&plusmn;15%</button>
+                </div>
+                <span class="pill" id="actions-total">&mdash;</span>
+              </div>
+            </div>
+            <div class="actions" id="actions"></div>
+          </div>
+
+          <!-- Why this plan? — plain-language explanation from /api/explain -->
+          <div class="card col-5" id="sec-why">
+            <div class="card-head">
+              <div class="card-title">Why this plan? <span class="info" title="Which constraints bind, what changes vs doing nothing (top SKU-level moves), how the number reacts to a ±10% budget, and what not to over-trust. The same structure is exported to the PDF's Why page and the workbook's Explanation sheet.">?</span></div>
+              <button class="btn" id="whyToggle" type="button" aria-expanded="false" aria-controls="whyBody">Show</button>
+            </div>
+            <div class="why-body" id="whyBody" hidden>
+              <div class="why-loading" id="whyLoading">Building the explanation&hellip;</div>
+              <div id="whyContent"></div>
+            </div>
+          </div>
+
+          <!-- Scenario compare (A vs B) — server-side POST /api/scenario/compare.
+               Two named budget/guardrail scenarios compared in one deterministic
+               call; the same A/B table is written to the workbook's Scenarios sheet. -->
+          <div class="card col-12" id="sec-scenario">
+            <div class="card-head">
+              <div class="card-title">Scenario compare (A vs B) <span class="info" title="Runs the optimiser under two named budget / price-guardrail scenarios server-side (POST /api/scenario/compare) over the same dataset, and shows each scenario's KPIs with the absolute and % deltas. Deterministic; routing is solved once and shared across both scenarios, so the uplift delta is driven by pricing and assortment. The same A/B table is exported to the workbook's Scenarios sheet.">?</span></div>
+              <button class="btn primary" id="runScenarioCompare" type="button" title="Run the A/B compare on the server for the two scenarios below">Compare A vs B</button>
+            </div>
+            <div class="scenario-form">
+              <div class="sc-side">
+                <div class="sc-tag">Scenario A</div>
+                <div class="sc-ctrl">
+                  <div class="sc-row"><span>Working-capital budget</span><span id="scABudgetLabel">40%</span></div>
+                  <input type="range" id="scABudget" min="15" max="100" value="40" step="1" />
+                </div>
+                <div class="sc-row"><span>Price guardrail</span>
+                  <div class="seg" id="scAGuard">
+                    <button data-mc="0.05">&plusmn;5%</button>
+                    <button data-mc="0.1">&plusmn;10%</button>
+                    <button class="active" data-mc="0.15">&plusmn;15%</button>
+                  </div>
+                </div>
+              </div>
+              <div class="sc-side">
+                <div class="sc-tag">Scenario B</div>
+                <div class="sc-ctrl">
+                  <div class="sc-row"><span>Working-capital budget</span><span id="scBBudgetLabel">70%</span></div>
+                  <input type="range" id="scBBudget" min="15" max="100" value="70" step="1" />
+                </div>
+                <div class="sc-row"><span>Price guardrail</span>
+                  <div class="seg" id="scBGuard">
+                    <button data-mc="0.05">&plusmn;5%</button>
+                    <button class="active" data-mc="0.1">&plusmn;10%</button>
+                    <button data-mc="0.15">&plusmn;15%</button>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="sc-side">
-              <div class="sc-tag">Scenario B</div>
-              <div class="sc-ctrl">
-                <div class="sc-row"><span>Working-capital budget</span><span id="scBBudgetLabel">70%</span></div>
-                <input type="range" id="scBBudget" min="15" max="100" value="70" step="1" />
+            <section class="compare" id="scenarioResult" hidden>
+              <div class="cmp-col">
+                <div class="cmp-tag">Scenario A</div>
+                <div class="cmp-scenario" id="scResAScenario">&mdash;</div>
+                <div class="cmp-uplift" id="scResAUplift">&mdash;</div>
+                <div class="cmp-levers" id="scResALevers">&mdash;</div>
               </div>
-              <div class="sc-row"><span>Price guardrail</span>
-                <div class="seg" id="scBGuard">
-                  <button data-mc="0.05">±5%</button>
-                  <button class="active" data-mc="0.1">±10%</button>
-                  <button data-mc="0.15">±15%</button>
-                </div>
+              <div class="cmp-col">
+                <div class="cmp-tag">Scenario B</div>
+                <div class="cmp-scenario" id="scResBScenario">&mdash;</div>
+                <div class="cmp-uplift" id="scResBUplift">&mdash;</div>
+                <div class="cmp-levers" id="scResBLevers">&mdash;</div>
               </div>
-            </div>
+              <div class="cmp-col cmp-delta">
+                <div class="cmp-tag">&Delta; uplift (B &minus; A, modelled)</div>
+                <div class="cmp-uplift" id="scResDelta">&mdash;</div>
+                <div class="cmp-levers" id="scResDeltaLevers">&mdash;</div>
+                <div class="cmp-note" id="scResNote">routing identical in both scenarios</div>
+              </div>
+            </section>
+            <div class="legend"><span class="lg" id="scenarioProvenance">Set two scenarios and click Compare &mdash; results are computed server-side and are deterministic.</span></div>
           </div>
-          <section class="compare" id="scenarioResult" hidden>
-            <div class="cmp-col">
-              <div class="cmp-tag">Scenario A</div>
-              <div class="cmp-scenario" id="scResAScenario">—</div>
-              <div class="cmp-uplift" id="scResAUplift">—</div>
-              <div class="cmp-levers" id="scResALevers">—</div>
-            </div>
-            <div class="cmp-col">
-              <div class="cmp-tag">Scenario B</div>
-              <div class="cmp-scenario" id="scResBScenario">—</div>
-              <div class="cmp-uplift" id="scResBUplift">—</div>
-              <div class="cmp-levers" id="scResBLevers">—</div>
-            </div>
-            <div class="cmp-col cmp-delta">
-              <div class="cmp-tag">&Delta; uplift (B &minus; A, modelled)</div>
-              <div class="cmp-uplift" id="scResDelta">—</div>
-              <div class="cmp-levers" id="scResDeltaLevers">—</div>
-              <div class="cmp-note" id="scResNote">routing identical in both scenarios</div>
-            </div>
-          </section>
-          <div class="legend"><span class="lg" id="scenarioProvenance">Set two scenarios and click Compare &mdash; results are computed server-side and are deterministic.</span></div>
         </div>
+      </section>
 
-        <!-- Why this plan? — plain-language explanation from /api/explain -->
-        <div class="card col-12" id="sec-why">
-          <div class="card-head">
-            <div class="card-title">Why this plan? <span class="info" title="Which constraints bind, what changes vs doing nothing (top SKU-level moves), how the number reacts to a ±10% budget, and what not to over-trust. The same structure is exported to the PDF's Why page and the workbook's Explanation sheet.">?</span></div>
-            <button class="btn" id="whyToggle" type="button" aria-expanded="false" aria-controls="whyBody">Show</button>
-          </div>
-          <div class="why-body" id="whyBody" hidden>
-            <div class="why-loading" id="whyLoading">Building the explanation&hellip;</div>
-            <div id="whyContent"></div>
+      <!-- ═══ ST-06 · RECONCILE ═══ -->
+      <section class="station" id="st-reconcile">
+        <header class="station-head">
+          <span class="st-code">ST-06</span>
+          <h2 class="st-name">Reconcile</h2>
+          <span class="st-desc">every headline number, machine-checked</span>
+        </header>
+        <div class="grid">
+          <!-- Proof strip: the cross-engine reconciliation guard (consumes /api/reconcile) -->
+          <div class="card col-12" id="sec-reconcile-card">
+            <div class="card-head">
+              <div class="card-title">Reconciliation guard <span class="info" title="dip.reconcile re-runs every engine on the seeded synthetic dataset and checks the cross-engine identities that keep the composed headline numbers honest. The strip below shows each identity's verdict; the executive brief traces every headline number to its engine source field.">?</span></div>
+              <span class="pill plain" id="proofPill">&mdash;</span>
+            </div>
+            <div class="proof">
+              <span class="proof-count" id="proofCount">&mdash;</span>
+              <div class="proof-strip" id="proofStrip" role="list" aria-label="Cross-engine identity checks"></div>
+              <div class="proof-meta" id="proofMeta">Checking the ledger&hellip;</div>
+              <a class="btn" href="/reconcile" title="Executive brief: every headline number traced to its engine source">Open the executive brief</a>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   </main>
 </div>
