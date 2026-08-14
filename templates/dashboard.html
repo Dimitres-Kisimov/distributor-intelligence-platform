@@ -27,6 +27,7 @@
     <a class="nav-item" data-target="st-routing"><span class="code">04</span> Routing</a>
     <a class="nav-item" data-target="st-plan"><span class="code">05</span> Plan</a>
     <a class="nav-item" data-target="st-reconcile"><span class="code">06</span> Reconcile</a>
+    <a class="nav-item" data-target="st-change"><span class="code">07</span> Change</a>
     <div class="nav-spacer"></div>
     <div class="nav-foot">
       {% if source and not source.synthetic %}Your data: {{ source.filename }} ({{ source.n_skus }} SKUs).{% else %}Synthetic data, generated deterministically.{% endif %}<br />
@@ -479,6 +480,144 @@
               <div class="proof-meta" id="proofMeta">Checking the ledger&hellip;</div>
               <a class="btn" href="/reconcile" title="Executive brief: every headline number traced to its engine source">Open the executive brief</a>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ ST-07 · CHANGE ═══
+           The reconciliation discipline applied to *change*: two plan runs
+           diffed, with a EUR bridge whose named causes sum to the whole
+           difference in the headline uplift (GET/POST /api/plan-diff). -->
+      <section class="station" id="st-change">
+        <header class="station-head">
+          <span class="st-code">ST-07</span>
+          <h2 class="st-name">Change</h2>
+          <span class="st-desc">two plan runs, diffed &middot; every euro of the difference attributed</span>
+        </header>
+        <div class="grid">
+          <!-- Bridge + run form (consumes /api/plan-diff) -->
+          <div class="card col-12" id="sec-plandiff">
+            <div class="card-head">
+              <div class="card-title">Plan diff &amp; &euro; bridge <span class="info" id="pdInfo" title="Two runs of the same engine stack, diffed: the SKUs the range gained and lost, the price recommendations that moved, the replenishment policy that shifted, the routing that changed — and a bridge from run A's headline uplift to run B's in which every euro is attributed to a named cause and checked as an identity.">?</span></div>
+              <div class="head-controls">
+                <span class="pill plain" id="pdPill">&mdash;</span>
+                <button class="btn primary" id="runPlanDiff" type="button" title="Diff the baseline against the revised run below — computed server-side and deterministic">Run diff</button>
+              </div>
+            </div>
+
+            <!-- form-first: A is the anchor, B is the run you are proposing -->
+            <div class="scenario-form pd-form">
+              <div class="sc-side">
+                <div class="sc-tag">Run A &middot; baseline</div>
+                <div class="pd-spec" id="pdSpecA">&mdash;</div>
+                <div class="sc-row pd-anchor-note"><span>The approved plan &mdash; the anchor every change is measured against.</span></div>
+              </div>
+              <div class="sc-side">
+                <div class="sc-tag">Run B &middot; revised</div>
+                <div class="sc-ctrl">
+                  <div class="sc-row"><span>Working-capital budget</span><span id="pdBudgetLabel">30%</span></div>
+                  <input type="range" id="pdBudget" min="15" max="100" value="30" step="1" />
+                </div>
+                <div class="sc-row"><span>Price guardrail</span>
+                  <div class="seg" id="pdGuard">
+                    <button data-mc="0.05">&plusmn;5%</button>
+                    <button class="active" data-mc="0.1">&plusmn;10%</button>
+                    <button data-mc="0.15">&plusmn;15%</button>
+                  </div>
+                </div>
+                <div class="sc-row"><span>Service target</span>
+                  <div class="seg" id="pdService" title="Cycle service level used by the replenishment policy: the ABC-XYZ matrix, or one flat target for every SKU">
+                    <button data-sl="">ABC-XYZ</button>
+                    <button class="active" data-sl="0.95">95%</button>
+                    <button data-sl="0.99">99%</button>
+                  </div>
+                </div>
+                <div class="sc-row"><span>Cost per purchase order</span>
+                  <div class="seg" id="pdOrderCost" title="Fixed cost to raise and receive one replenishment PO — drives the EOQ ordering-vs-holding trade-off">
+                    <button data-oc="50">&euro;50</button>
+                    <button class="active" data-oc="65">&euro;65</button>
+                    <button data-oc="120">&euro;120</button>
+                  </div>
+                </div>
+                <div class="sc-row"><span>Van capacity</span>
+                  <div class="seg" id="pdCapacity" title="Vehicle payload the CVRP is solved for — a smaller van re-solves the whole delivery run">
+                    <button data-cap="2200">2200 kg</button>
+                    <button class="active" data-cap="2000">2000 kg</button>
+                    <button data-cap="2400">2400 kg</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mini-tiles" id="pdTiles"></div>
+
+            <div class="pd-bridge">
+              <canvas id="pdBridgeChart" height="300"></canvas>
+              <div class="drill-scroll">
+                <table class="drill-table" id="pdBridgeTable"></table>
+              </div>
+            </div>
+
+            <!-- the change-side ledger, shown as a checklist object like ST-06 -->
+            <div class="proof pd-proof">
+              <span class="proof-count" id="pdProofCount">&mdash;</span>
+              <div class="proof-strip" id="pdProofStrip" role="list" aria-label="Plan-diff identity checks"></div>
+              <div class="proof-meta" id="pdProofMeta">Run the diff to check the bridge&hellip;</div>
+            </div>
+
+            <div class="station-note" id="pdFoot">&mdash;</div>
+            <details class="caveats" id="pdCaveats" hidden>
+              <summary>Assumptions &amp; caveats</summary>
+              <ul id="pdCaveatList"></ul>
+            </details>
+          </div>
+
+          <!-- Range changes -->
+          <div class="card col-6" id="sec-pd-range">
+            <div class="card-head">
+              <div class="card-title">Range changes</div>
+              <span class="pill plain" id="pdRangePill">&mdash;</span>
+            </div>
+            <div class="drill-scroll pd-scroll">
+              <table class="drill-table" id="pdRangeTable"></table>
+            </div>
+            <div class="legend"><span class="lg" id="pdRangeNote">&mdash;</span></div>
+          </div>
+
+          <!-- Price moves -->
+          <div class="card col-6" id="sec-pd-prices">
+            <div class="card-head">
+              <div class="card-title">Price moves</div>
+              <span class="pill plain" id="pdPricePill">&mdash;</span>
+            </div>
+            <div class="drill-scroll pd-scroll">
+              <table class="drill-table" id="pdPriceTable"></table>
+            </div>
+            <div class="legend"><span class="lg" id="pdPriceNote">&mdash;</span></div>
+          </div>
+
+          <!-- Replenishment-policy changes -->
+          <div class="card col-6" id="sec-pd-policy">
+            <div class="card-head">
+              <div class="card-title">Replenishment policy changes <span class="info" title="Reported in working-capital euros and deliberately NOT part of the uplift bridge: the plan's expected uplift is composed from pricing, assortment and routing only.">?</span></div>
+              <span class="pill plain" id="pdPolicyPill">&mdash;</span>
+            </div>
+            <div class="drill-scroll pd-scroll">
+              <table class="drill-table" id="pdPolicyTable"></table>
+            </div>
+            <div class="legend"><span class="lg" id="pdPolicyNote">&mdash;</span></div>
+          </div>
+
+          <!-- Routing change -->
+          <div class="card col-6" id="sec-pd-routing">
+            <div class="card-head">
+              <div class="card-title">Routing change</div>
+              <span class="pill plain" id="pdRoutingPill">&mdash;</span>
+            </div>
+            <div class="drill-scroll pd-scroll">
+              <table class="drill-table" id="pdRoutingTable"></table>
+            </div>
+            <div class="legend"><span class="lg" id="pdRoutingNote">&mdash;</span></div>
           </div>
         </div>
       </section>

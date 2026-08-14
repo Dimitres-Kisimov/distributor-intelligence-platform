@@ -20,6 +20,7 @@ from .data import build_dataset
 from .forecast import forecast_revenue
 from .inventory import inventory_policy
 from .optimize import optimize_assortment, optimize_prices, optimize_routes
+from .plandiff import plan_diff
 from .prescribe import build_plan
 from .reliability import supplier_reliability
 from .scenario import compare_scenarios
@@ -40,6 +41,7 @@ __all__ = [
     "optimize_assortment",
     "optimize_prices",
     "optimize_routes",
+    "plan_diff",
     "revenue_breakdown",
     "rfm_segments",
     "supplier_reliability",

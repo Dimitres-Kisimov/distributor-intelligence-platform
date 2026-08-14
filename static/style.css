@@ -550,6 +550,45 @@ details.caveats li { margin: 3px 0; }
 .proof-meta b { font-variant-numeric: tabular-nums; }
 .proof .btn { flex: none; }
 
+/* ---------- ST-07 plan diff: the bridge, its ledger and its change tables ----
+   Same objects as the rest of the command center (station head, hairline rules,
+   form-first controls, proof strip); only the pieces with no existing analogue
+   are defined here. Money keeps the platform's sign language — up-text for
+   euros gained, down-text for euros lost — which is the OPPOSITE of the
+   .delta-pos/.delta-neg pair used for inventory capital, so the two are never
+   mixed on one figure. */
+.pd-form .pd-spec {
+  font: 600 11.5px/1.75 var(--mono); color: var(--muted);
+  font-variant-numeric: tabular-nums; word-break: break-word;
+}
+.pd-form .pd-spec b { color: var(--text); font-weight: 700; }
+/* --muted, not --faint: --faint on the inset surface is 4.30:1 in the light
+   theme, which misses AA for body text; --muted clears it at 5.79:1 / 6.25:1. */
+.pd-form .pd-anchor-note { margin-top: auto; font-weight: 500; color: var(--muted); font-size: 11px; }
+.pd-form .pd-anchor-note span { line-height: 1.5; }
+
+.pd-bridge { display: flex; flex-direction: column; gap: 12px; }
+.pd-proof { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+.pd-scroll { max-height: 268px; overflow-y: auto; }
+
+/* signed money in the change tables */
+.gain { color: var(--up-text); }
+.loss { color: var(--down-text); }
+
+/* direction of a range move: the letters carry it, color only reinforces */
+.dir {
+  display: inline-block; min-width: 34px; padding: 1px 6px; border-radius: 3px;
+  font: 700 9.5px/1.6 var(--mono); text-align: center; letter-spacing: .08em;
+  border: 1px solid var(--line-strong); color: var(--muted); background: var(--panel-2);
+}
+.dir.in { color: var(--up-text); border-color: color-mix(in srgb, var(--up) 45%, var(--line)); background: color-mix(in srgb, var(--up) 8%, var(--panel)); }
+.dir.out { color: var(--down-text); border-color: color-mix(in srgb, var(--down) 45%, var(--line)); background: color-mix(in srgb, var(--down) 8%, var(--panel)); }
+
+/* the bridge ledger reuses .drill-table; totals and the rounding line are set apart */
+.drill-table tr.pd-total td { font-weight: 700; border-top: 1px solid var(--line-strong); }
+.drill-table tr.pd-quiet td { color: var(--faint); }
+.drill-table td.mid, .drill-table th.mid { text-align: center; }
+
 /* ---------- why-this-plan panel ---------- */
 .why-body { padding-top: 4px; }
 .why-loading { color: var(--muted); font-size: 12.5px; padding: 8px 0; }

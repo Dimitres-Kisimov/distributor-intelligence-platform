@@ -22,7 +22,8 @@ API  : ``/api/kpis`` ``/api/kpis/drilldown`` ``/api/forecast``
        ``/api/crosssell`` ``/api/optimize/assortment`` ``/api/optimize/prices``
        ``/api/optimize/routes`` ``/api/prescribe`` ``/api/explain``
        ``/api/inventory`` ``/api/reliability`` ``/api/sensitivity``
-       ``/api/scenario/compare`` (POST) ``/api/reconcile``
+       ``/api/scenario/compare`` (POST) ``/api/plan-diff`` (GET + POST)
+       ``/api/reconcile``
        ``/api/import`` ``/api/import/template`` ``/api/reset``
        ``/api/export/pdf`` ``/api/export/excel`` ``/api/health``
 """
@@ -55,6 +56,7 @@ from dip import (
     importer,
     inventory,
     optimize,
+    plandiff,
     prescribe,
     reconcile,
     reliability,
@@ -127,8 +129,25 @@ def _build_cache(ds, routes: dict | None = None) -> dict:
 
 
 def _make_state(ds, source: dict, routes: dict | None = None) -> dict:
-    """Bundle a dataset with its engine cache + source label, swapped atomically."""
-    return {"ds": ds, "cache": _build_cache(ds, routes=routes), "source": source}
+    """Bundle a dataset with its engine cache + source label, swapped atomically.
+
+    ``plan_diff`` and ``routes_by_fleet`` are lazy slots, not part of the eager
+    build: the plan diff runs the engine stack twice and may need a second CVRP
+    solve, so it is computed on first request (like the reconciliation ledger)
+    rather than added to every boot. Both are deterministic per dataset, so
+    caching them is safe, and both travel with the dataset they describe — an
+    import or a reset swaps the state wholesale and takes its caches with it.
+    """
+    cache = _build_cache(ds, routes=routes)
+    return {
+        "ds": ds,
+        "cache": cache,
+        "source": source,
+        "plan_diff": None,
+        "routes_by_fleet": {
+            (plandiff.DEFAULT_N_VEHICLES, plandiff.DEFAULT_CAPACITY_KG): cache["routes"]
+        },
+    }
 
 
 _SYNTHETIC_STATE = _make_state(
@@ -616,6 +635,68 @@ def api_scenario_compare():
             routes=st["cache"]["routes"],
         )
     except scenario.ScenarioError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify(result)
+
+
+def _plan_diff_for(st: dict, run_a: dict | None, run_b: dict | None) -> dict:
+    """Diff two plan runs over the served dataset, reusing every cached solve.
+
+    The state's routing solve is handed in (so a default-fleet run never
+    re-solves the CVRP) along with the state's fleet cache, so a second request
+    for a fleet already explored is free. The ABC-XYZ classification is shared
+    too — it depends on the dataset, not on any run knob.
+    """
+    return plandiff.plan_diff(
+        st["ds"],
+        run_a=run_a,
+        run_b=run_b,
+        source=st["source"],
+        routes=st["cache"]["routes"],
+        routes_cache=st["routes_by_fleet"],
+        abc_xyz_result=st["cache"]["abc_xyz"],
+    )
+
+
+def _default_plan_diff(st: dict) -> dict:
+    """The shipped default diff for ``st``, computed once and cached on it."""
+    if st["plan_diff"] is None:
+        with _LOCK:
+            if st["plan_diff"] is None:
+                st["plan_diff"] = _plan_diff_for(st, None, None)
+    return st["plan_diff"]
+
+
+@app.route("/api/plan-diff", methods=["GET", "POST"])
+def api_plan_diff():
+    """What changed between two plan runs, with a EUR bridge that reconciles.
+
+    ``GET`` returns the shipped default pair — the approved plan against a
+    replan that moves every knob the platform owns — computed once per dataset
+    and cached (it runs the engine stack twice and needs a second CVRP solve).
+
+    ``POST`` diffs two named runs of your own::
+
+        {"run_a": {"name"?, "budget"?, "max_change"?, "service_level"?,
+                   "holding_rate"?, "order_cost_eur"?, "n_vehicles"?, "capacity_kg"?},
+         "run_b": {...}}
+
+    Omitted fields fall back to the defaults for that side. The payload carries
+    the SKUs added/dropped, the price moves, the replenishment-policy changes,
+    the routing change, and the bridge whose named causes sum to the whole
+    change in expected annual uplift — plus the identities that check it.
+    Deterministic; 400 on an invalid run spec or a fleet that cannot serve the
+    delivery run, never a plausible wrong answer.
+    """
+    st = STATE
+    if request.method == "GET":
+        return jsonify(_default_plan_diff(st))
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": 'POST a JSON body: {"run_a": {...}, "run_b": {...}}'}), 400
+    try:
+        result = _plan_diff_for(st, payload.get("run_a"), payload.get("run_b"))
+    except plandiff.PlanDiffError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify(result)
 

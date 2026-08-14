@@ -58,6 +58,11 @@ Four things, layered:
    budget/guardrail scenario side by side with a modelled uplift delta
    (routing is solved once at startup and is identical in both scenarios, so
    the delta comes from pricing and assortment — the compare strip says so).
+5. **Diff** — and because a plan is revisited, not written once, two plan runs
+   can be diffed: the SKUs the range gained and lost, the price recommendations
+   that moved, the reorder points and EOQs that shifted, the routing that
+   changed — and a € bridge from one run's headline uplift to the other in
+   which *every euro is attributed to a named cause* and checked as an identity.
 
 ## The numbers it currently produces
 
@@ -234,6 +239,98 @@ Honesty, all disclosed on the payload, the panel and the sheet:
   up, so a scenario with **more** budget can post a **smaller** assortment delta
   even while it captures more absolute margin. The compare reports it in `note`
   rather than hiding it — the same effect the budget sensitivity surfaces.
+
+## Plan diff: what changed, and why — to the euro
+
+The compare above answers *"which scenario is bigger?"*. The question a planner
+actually asks on the second visit is **"what changed since last time, and
+why?"** — and a KPI-level A/B cannot answer it: knowing the uplift moved by
+EUR 21k says nothing about *which SKUs* left the range, *which prices* moved, or
+*which reorder points* shifted. `GET /api/plan-diff` (the shipped default pair)
+and `POST /api/plan-diff` (two runs of your own) diff two full plan runs and
+return:
+
+- the **assortment** set difference — SKUs added to and dropped from the MILP
+  range, and from the greedy baseline the lever is measured against;
+- the **price moves** — per-SKU recommended-price changes and the profit each
+  one carries;
+- the **replenishment-policy** changes — safety stock, reorder point and EOQ per
+  SKU, plus the working capital they move;
+- the **routing** change — kilometres, vehicles, and which stops now travel
+  together;
+- and a **EUR bridge** from run A's headline uplift to run B's in which every
+  euro is attributed to a named cause.
+
+A run is the whole set of knobs the platform owns: `budget`, `max_change`,
+`service_level`, `holding_rate`, `order_cost_eur`, `n_vehicles`, `capacity_kg`.
+A `POST` diffs exactly the knobs you set — anything you leave out is taken from
+the baseline on both sides, so one changed field means one changed thing.
+
+```bash
+curl -X POST http://localhost:5000/api/plan-diff \
+  -H 'Content-Type: application/json' \
+  -d '{"run_a":{"name":"Approved","budget":10558},
+       "run_b":{"name":"Proposal","budget":7918,"max_change":0.10,
+                "service_level":0.95,"order_cost_eur":65,"capacity_kg":2000}}'
+```
+
+It is surfaced as **ST-07 · Change** on the dashboard: the run form, the bridge
+as a waterfall, the named-cause ledger, the four change tables, and the diff's
+own identity proof strip.
+
+### The bridge is an identity, not an illustration
+
+This is the reconciliation discipline (below) applied to *change*. On the seeded
+data the shipped default pair — the approved plan against a replan that tightens
+working capital to 30% of range capital, tightens the guardrail to +/-10%, moves
+to a flat 95% service target, raises the cost of a purchase order to EUR 65 and
+drops to 2,000 kg vans — walks like this:
+
+| Cause | Lever | Amount | Running |
+| --- | --- | --- | --- |
+| **Baseline plan** — expected annual uplift | | | **EUR 136,972.20** |
+| Price moves (184 of 200 recommendations moved) | Pricing | −EUR 29,931.98 | EUR 107,040.22 |
+| SKUs added (0 entered the range) | Assortment | +EUR 0.00 | EUR 107,040.22 |
+| SKUs dropped (21 left the range) | Assortment | −EUR 150,919.35 | −EUR 43,879.13 |
+| Greedy baseline re-picks (21 out) | Assortment | +EUR 150,224.01 | EUR 106,344.88 |
+| Routing (+32.64 km saved/run at EUR 1.15/km x 250) | Logistics | +EUR 9,384.00 | EUR 115,728.88 |
+| Publication rounding | — | −EUR 0.02 | EUR 115,728.86 |
+| **Revised plan** — expected annual uplift | | **−EUR 21,243.34** | **EUR 115,728.86** |
+
+The named causes sum to −EUR 21,243.34, which *is* the whole difference between
+the two plans. **11 change identities** check it: that the bridge closes, that
+the moved-price table is complete (the 16 SKUs left out carry exactly EUR 0),
+that the range diff is a true set difference, that the routing lever is the km
+change priced at the documented rate, and so on. They are shown as a proof strip
+on the station, exactly like the reconciliation guard's.
+
+Honesty, disclosed on the payload, the station and here:
+
+- **The rounding line is real, not a plug.** Every engine publishes to the cent,
+  so a run's total and the sum of its own rows differ by fractions of one. Each
+  part of that line is measured on **one run alone** — a published figure minus
+  the sum of that same run's own published rows — never fitted to close the gap,
+  and the total is bounded at half a cent per published value it spans (here
+  EUR 0.02 against a EUR 4.03 bound over 806 values). Mis-attribute a single SKU
+  and the bridge stops closing.
+- **The inventory diff is deliberately *not* in the uplift bridge.** The plan's
+  expected uplift is composed from pricing, assortment and routing only, so the
+  EUR 14,795 of working capital this replan moves is reported beside the bridge,
+  never inside it. A run pair that changes only the replenishment knobs
+  correctly posts a EUR 0 uplift delta (tested).
+- **The assortment lever moves against intuition, visibly.** It is the MILP's
+  *edge over the greedy baseline*, so cutting the budget takes EUR 150,919 of
+  margin out of the MILP range while handing EUR 150,224 back as the greedy
+  baseline loses the same ground. The bridge gives that its own line instead of
+  netting it to a small number with no explanation.
+- **Deterministic.** Runs sharing a fleet share one CVRP solve, so "routing
+  unchanged" is exactly EUR 0 rather than solver noise; distinct fleets are each
+  solved once on a fixed solution budget. A fleet that cannot serve the delivery
+  run is rejected with `400` before the solver is launched — an infeasible CVRP
+  has a solution budget, not a time limit, so it would otherwise hunt forever.
+- **Vehicle numbers are solver labels**, so "regrouped stops" compares the *set
+  of customers a stop travels with*, not vehicle indices; comparing indices
+  would report almost every stop as moved when nothing did.
 
 ## Driver sensitivity (how robust is the headline?)
 
@@ -520,6 +617,7 @@ dip/reliability.py supplier scorecards: measured lead times -> safety-stock cost
 dip/prescribe.py   composes the lifts into one plan + action cards
 dip/explain.py     "why this plan?" — binding constraints, moves, sensitivity
 dip/scenario.py    A/B compare: two named budget/guardrail scenarios + deltas
+dip/plandiff.py    what changed between two plan runs + the EUR bridge that ties
 dip/reconcile.py   cross-engine reconciliation: headline numbers -> engine fields
 dip/exports.py     PDF (matplotlib) and Excel (openpyxl) from that plan
    |

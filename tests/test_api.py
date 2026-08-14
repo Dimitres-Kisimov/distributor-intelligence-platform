@@ -166,9 +166,11 @@ def test_dashboard_html_renders(client):
     # drill-down panels and the scenario-compare controls ship with the page
     for marker in (b"skuDrill", b"custDrill", b"pinScenario", b"compareBar"):
         assert marker in resp.data
-    # the six designed stations, including the inventory / reliability panels
-    # (fed by /api/inventory and /api/reliability) and the reconciliation
-    # proof strip (fed by /api/reconcile)
+    # the seven designed stations, including the inventory / reliability panels
+    # (fed by /api/inventory and /api/reliability), the reconciliation proof
+    # strip (fed by /api/reconcile) and the plan-diff bridge (fed by
+    # /api/plan-diff) — the change station's own markup is pinned in detail by
+    # tests/test_plandiff.py
     for marker in (
         b"st-demand",
         b"st-inventory",
@@ -176,8 +178,10 @@ def test_dashboard_html_renders(client):
         b"st-routing",
         b"st-plan",
         b"st-reconcile",
+        b"st-change",
         b"invCellTable",
         b"relTable",
         b"proofStrip",
+        b"pdBridgeTable",
     ):
         assert marker in resp.data

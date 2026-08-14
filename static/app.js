@@ -141,7 +141,7 @@ function initNav() {
 }
 
 /* ------------------------------------------------------------------ state */
-const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, crosssell: null, crossProduct: "", crossRecs: null, kpiDrilldown: null, kpiDrillOpen: null, inventory: null, reliability: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
+const STATE = { kpis: null, plan: null, forecast: null, margin: null, abc: null, rfm: null, revenue: null, routes: null, assort: null, crosssell: null, crossProduct: "", crossRecs: null, kpiDrilldown: null, kpiDrillOpen: null, inventory: null, reliability: null, planDiff: null, breakdownDim: "region", routeMode: "optimized", maxChange: 0.15, planSeq: 0, drillCell: null, drillSegment: null, pinned: null };
 
 /* ------------------------------------------------------------------ KPIs */
 function renderKPIs() {
@@ -1251,11 +1251,358 @@ async function loadProof() {
   }
 }
 
+/* -------------------------------------------------------- ST-07 · change */
+/* The plan diff from /api/plan-diff: a EUR bridge whose named causes sum to
+   the whole change in the headline uplift, the change tables underneath it,
+   and the diff's own identity ledger shown as a proof strip — the same object
+   ST-06 uses, because it is the same discipline applied to deltas. */
+
+const PD_ROW_CAP = 40; // tables show the biggest movers; the payload carries all
+
+function sgnEurFull(n) { return (n >= 0 ? "+" : "−") + "€" + Math.abs(Math.round(n)).toLocaleString("en-US"); }
+function moneyClass(n) { return n > 0 ? "gain" : n < 0 ? "loss" : ""; }
+function segValue(sel, attr) {
+  const b = document.querySelector(sel + " button.active");
+  return b ? b.dataset[attr] : "";
+}
+function setSeg(sel, attr, value) {
+  const buttons = $$(sel + " button");
+  const match = buttons.filter((b) => b.dataset[attr] === value);
+  if (!match.length) return;
+  buttons.forEach((b) => b.classList.remove("active"));
+  match[0].classList.add("active");
+}
+function initSeg(sel) {
+  $$(sel + " button").forEach((b) =>
+    b.addEventListener("click", () => {
+      $$(sel + " button").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+    })
+  );
+}
+
+/* The bridge as a waterfall. Unlike the margin bridge this one can run
+   negative — a plan can lose more than its own headline in one step — so the
+   scale is taken from the bars themselves and the zero line is drawn. */
+function renderPdBridge() {
+  const pd = STATE.planDiff;
+  const canvas = $("#pdBridgeChart");
+  if (!pd || !canvas) return;
+  const br = pd.bridge;
+  const { ctx, w, h } = fitCanvas(canvas, 300);
+  const padL = 62, padR = 14, padT = 22, padB = 44;
+
+  const items = [{ label: pd.run_a.name, value: br.start.eur, type: "total", cause: "run A's expected annual uplift" }];
+  br.steps.forEach((s) => items.push({ label: s.label, value: s.eur, type: "delta", cause: s.cause, lever: s.lever }));
+  items.push({ label: pd.run_b.name, value: br.end.eur, type: "total", cause: "run B's expected annual uplift" });
+
+  let run = 0;
+  const bars = [];
+  items.forEach((it) => {
+    if (it.type === "total") { bars.push({ ...it, base: 0, top: it.value }); run = it.value; }
+    else { const base = run; run += it.value; bars.push({ ...it, base: Math.min(base, run), top: Math.max(base, run) }); }
+  });
+  const lo = Math.min(0, ...bars.map((b) => b.base));
+  const hi = Math.max(0, ...bars.map((b) => b.top));
+  const pad = (hi - lo) * 0.12 || 1;
+  const ymin = lo - (lo < 0 ? pad : 0), ymax = hi + pad;
+  const bw = Math.min(26, ((w - padL - padR) / items.length) * 0.6);
+  const gap = (w - padL - padR) / items.length;
+  const Y = (v) => padT + (1 - (v - ymin) / (ymax - ymin)) * (h - padT - padB);
+  const grid = cssVar("--grid"), muted = cssVar("--muted"), ink = cssVar("--ink");
+  const cUp = cssVar("--up"), cDown = cssVar("--down");
+  const tUp = cssVar("--up-text"), tDown = cssVar("--down-text");
+
+  ctx.font = CHART_FONT; ctx.textBaseline = "middle";
+  // niceTicks rounds outward, so it can hand back a tick below the floor of the
+  // scale; drawing that one would print a stray label under the category names.
+  niceTicks(ymin, ymax, 4).filter((t) => t >= ymin && t <= ymax).forEach((t) => {
+    ctx.strokeStyle = t === 0 ? cssVar("--line-strong") : grid;
+    ctx.beginPath(); ctx.moveTo(padL, Y(t)); ctx.lineTo(w - padR, Y(t)); ctx.stroke();
+    ctx.fillStyle = muted; ctx.textAlign = "right"; ctx.fillText(eur(t), padL - 8, Y(t));
+  });
+
+  const hit = [];
+  bars.forEach((b, i) => {
+    const x = padL + i * gap + (gap - bw) / 2;
+    const yTop = Y(b.top), yBase = Y(b.base);
+    let color = ink, labelColor = muted;
+    if (b.type === "delta") {
+      color = b.value >= 0 ? cUp : cDown;
+      labelColor = b.value >= 0 ? tUp : tDown;
+    }
+    ctx.fillStyle = color;
+    const rr = 3, ht = Math.max(2, yBase - yTop);
+    const radii = b.type === "delta" && b.value < 0 ? [0, 0, rr, rr] : [rr, rr, 0, 0];
+    ctx.beginPath(); ctx.roundRect(x, yTop, bw, ht, radii); ctx.fill();
+    if (i < bars.length - 1) {
+      const yc = Y(b.type === "total" ? b.value : (b.value >= 0 ? b.top : b.base));
+      ctx.strokeStyle = cssVar("--line-strong"); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + bw, yc); ctx.lineTo(x + gap, yc); ctx.stroke();
+    }
+    ctx.fillStyle = muted; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    const cap = b.label.length > 15 ? b.label.slice(0, 14) + "…" : b.label;
+    ctx.fillText(cap, x + bw / 2, h - padB + 10);
+    ctx.fillStyle = b.type === "total" ? cssVar("--text") : labelColor;
+    ctx.textBaseline = "bottom"; ctx.font = CHART_FONT_BOLD;
+    ctx.fillText(b.type === "delta" ? (b.value >= 0 ? "+" : "") + eur(b.value) : eur(b.value), x + bw / 2, yTop - 5);
+    ctx.font = CHART_FONT; ctx.textBaseline = "middle";
+    hit.push({ x, y: yTop, w: bw, h: ht, bar: b });
+  });
+
+  canvas.onmousemove = (ev) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+    const found = hit.find((z) => mx >= z.x - 6 && mx <= z.x + z.w + 6 && my >= z.y - 6 && my <= z.y + z.h + 6);
+    if (!found) { hideTip(); return; }
+    const b = found.bar;
+    const amount = b.type === "delta" ? sgnEurFull(b.value) : eurFull(b.value);
+    showTip(ev.clientX, ev.clientY,
+      `<b>${esc(b.label)}</b><br />${esc(amount)}${b.lever && b.lever !== "—" ? " · " + esc(b.lever) : ""}<br /><span style="opacity:.8">${esc(b.cause)}</span>`);
+  };
+  canvas.onmouseleave = hideTip;
+}
+
+function renderPdBridgeTable() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const br = pd.bridge;
+  let running = br.start.eur;
+  const rows = [
+    `<tr class="pd-total"><td>${esc(pd.run_a.name)}</td><td class="dim">expected annual uplift</td>` +
+    `<td class="num">—</td><td class="num">${eurFull(br.start.eur)}</td></tr>`,
+  ];
+  br.steps.forEach((s) => {
+    running += s.eur;
+    const quiet = s.id === "rounding";
+    const amount = quiet ? (s.eur >= 0 ? "+" : "−") + "€" + Math.abs(s.eur).toFixed(4) : sgnEurFull(s.eur);
+    rows.push(
+      `<tr class="${quiet ? "pd-quiet" : ""}" title="${esc(s.cause)}">` +
+      `<td>${esc(s.label)}</td><td class="dim">${esc(s.lever)}</td>` +
+      `<td class="num ${quiet ? "" : moneyClass(s.eur)}">${esc(amount)}</td>` +
+      `<td class="num">${eurFull(running)}</td></tr>`
+    );
+  });
+  rows.push(
+    `<tr class="pd-total"><td>${esc(pd.run_b.name)}</td><td class="dim">expected annual uplift</td>` +
+    `<td class="num ${moneyClass(br.delta_eur)}">${sgnEurFull(br.delta_eur)}</td>` +
+    `<td class="num">${eurFull(br.end.eur)}</td></tr>`
+  );
+  $("#pdBridgeTable").innerHTML =
+    `<tr><th>Cause</th><th>Lever</th><th class="num">Amount</th><th class="num">Running</th></tr>` + rows.join("");
+}
+
+function renderPdRange() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const a = pd.assortment, t = a.totals;
+  $("#pdRangePill").textContent = t.n_added + " in · " + t.n_dropped + " out · " + t.skus_carried_a + " → " + t.skus_carried_b + " SKUs";
+  const rows = a.added.map((r) => ({ ...r, dir: "IN", sign: 1 }))
+    .concat(a.dropped.map((r) => ({ ...r, dir: "OUT", sign: -1 })));
+  rows.sort((x, y) => y.annual_margin_eur - x.annual_margin_eur || (x.sku_id < y.sku_id ? -1 : 1));
+  const shown = rows.slice(0, PD_ROW_CAP);
+  $("#pdRangeTable").innerHTML = rows.length
+    ? `<tr><th class="mid">Move</th><th>SKU</th><th>Category</th><th class="num" title="Annual margin the MILP optimised over — the same vector the optimiser used">Annual margin</th><th class="num" title="Working capital this SKU ties up in the MILP's capital model">Capital</th></tr>` +
+      shown.map((r) => `<tr>
+        <td class="mid"><span class="dir ${r.dir === "IN" ? "in" : "out"}">${r.dir}</span></td>
+        <td>${esc(r.name)} <span class="dim mono">${esc(r.sku_id)}</span></td>
+        <td class="dim">${esc(r.category)}</td>
+        <td class="num ${r.sign > 0 ? "gain" : "loss"}">${sgnEurFull(r.sign * r.annual_margin_eur)}</td>
+        <td class="num">${eurFull(r.capital_eur)}</td></tr>`).join("")
+    : `<tr><td class="dim">The MILP carries exactly the same range in both runs — no SKU entered or left.</td></tr>`;
+  $("#pdRangeNote").textContent =
+    (rows.length > PD_ROW_CAP ? `Showing the ${PD_ROW_CAP} largest of ${rows.length} moves. ` : "") +
+    `The greedy baseline re-picks too (${t.n_greedy_added} in, ${t.n_greedy_dropped} out); the assortment lever is the MILP's edge over it, so that shift is its own line in the bridge.`;
+}
+
+function renderPdPrices() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const t = pd.pricing.totals;
+  $("#pdPricePill").textContent = t.n_moved + " of " + t.n_skus + " SKUs · ±" + pct(t.guardrail_a, 0) + " → ±" + pct(t.guardrail_b, 0);
+  const moves = pd.pricing.moves.slice(0, PD_ROW_CAP);
+  $("#pdPriceTable").innerHTML = pd.pricing.moves.length
+    ? `<tr><th>SKU</th><th class="num" title="Today's list price">List</th><th class="num" title="Recommended price in run A → run B">A → B</th><th class="num" title="Own-price elasticity from the dataset">Elast.</th><th class="num" title="Change in this SKU's modelled annual profit contribution between the two runs">Δ profit</th></tr>` +
+      moves.map((m) => `<tr>
+        <td><span class="mono">${esc(m.sku_id)}</span> <span class="dim">${esc(m.category)}</span></td>
+        <td class="num">€${m.price_old_eur.toFixed(2)}</td>
+        <td class="num">€${m.price_a_eur.toFixed(2)} → €${m.price_b_eur.toFixed(2)}</td>
+        <td class="num">${m.elasticity.toFixed(2)}</td>
+        <td class="num ${moneyClass(m.delta_eur)}">${sgnEurFull(m.delta_eur)}</td></tr>`).join("")
+    : `<tr><td class="dim">Every SKU keeps the same recommended price in both runs.</td></tr>`;
+  $("#pdPriceNote").textContent =
+    (pd.pricing.moves.length > PD_ROW_CAP ? `Showing the ${PD_ROW_CAP} largest of ${pd.pricing.moves.length} moves. ` : "") +
+    `${t.n_priced_up} priced up, ${t.n_priced_down} priced down; SKUs whose recommendation did not move carry exactly €0 and are left out.`;
+}
+
+function renderPdPolicy() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const t = pd.inventory.totals;
+  $("#pdPolicyPill").textContent = t.n_changed + " of " + t.n_skus + " SKUs · " + sgnEurFull(t.working_capital_delta_eur) + " capital";
+  const rows = pd.inventory.changes.slice(0, PD_ROW_CAP);
+  $("#pdPolicyTable").innerHTML = pd.inventory.changes.length
+    ? `<tr><th>SKU</th><th class="mid" title="ABC-XYZ cell — sets the service target in matrix mode">Cell</th><th class="num" title="Cycle service level A → B">Service</th><th class="num" title="Reorder point in units: mean lead-time demand + safety stock">ROP Δ</th><th class="num" title="Economic order quantity in units (Wilson lot size)">EOQ Δ</th><th class="num" title="Change in the working capital this SKU's average inventory ties up">Δ capital</th></tr>` +
+      rows.map((r) => `<tr>
+        <td>${esc(r.name)} <span class="dim mono">${esc(r.sku_id)}</span></td>
+        <td class="mid mono">${esc(r.cell)}</td>
+        <td class="num">${pct(r.service_level_a, 0)} → ${pct(r.service_level_b, 0)}</td>
+        <td class="num">${r.reorder_point_delta >= 0 ? "+" : "−"}${Math.abs(r.reorder_point_delta).toFixed(1)}</td>
+        <td class="num">${r.eoq_delta >= 0 ? "+" : "−"}${Math.abs(r.eoq_delta).toFixed(1)}</td>
+        <td class="num ${r.working_capital_delta_eur > 0 ? "delta-pos" : "delta-neg"}">${sgnEurFull(r.working_capital_delta_eur)}</td></tr>`).join("")
+    : `<tr><td class="dim">The replenishment policy is identical in both runs.</td></tr>`;
+  $("#pdPolicyNote").textContent =
+    (pd.inventory.changes.length > PD_ROW_CAP ? `Showing the ${PD_ROW_CAP} largest of ${pd.inventory.changes.length} changes. ` : "") +
+    `${t.n_reorder_point_up} reorder points up, ${t.n_reorder_point_down} down; safety stock ${sgnEurFull(t.safety_stock_delta_eur)}, cycle stock ${sgnEurFull(t.cycle_stock_delta_eur)}. Working capital is NOT part of the uplift bridge.`;
+}
+
+function renderPdRouting() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const r = pd.routing, t = r.totals;
+  const fleet = (f) => f.n_vehicles + " × " + num(f.capacity_kg) + " kg";
+  $("#pdRoutingPill").textContent = r.shared_solve ? "same fleet · one shared solve" : fleet(r.fleet_a) + " → " + fleet(r.fleet_b);
+  const km = (v) => num(v) + " km";
+  const rows = [
+    ["Fleet", fleet(r.fleet_a), fleet(r.fleet_b), "", "Vehicles available × payload the CVRP is solved for"],
+    ["Optimised km", km(t.optimized_km_a), km(t.optimized_km_b), (t.optimized_km_delta >= 0 ? "+" : "−") + km(Math.abs(t.optimized_km_delta)), "OR-Tools CVRP distance for one delivery run"],
+    ["Current practice km", km(t.baseline_km_a), km(t.baseline_km_b), (t.baseline_km_delta >= 0 ? "+" : "−") + km(Math.abs(t.baseline_km_delta)), "Nearest-neighbour baseline — how the round is built by hand today"],
+    ["Km saved", km(t.km_saved_a), km(t.km_saved_b), (t.km_saved_delta >= 0 ? "+" : "−") + km(Math.abs(t.km_saved_delta)), "Baseline minus optimised — what the solver wins"],
+    ["Share saved", pct(t.pct_saved_a), pct(t.pct_saved_b), "", "Km saved as a share of the baseline round"],
+    ["Vehicles used", String(t.vehicles_used_a), String(t.vehicles_used_b), "", "The solver minimises kilometres, not vans"],
+    ["Stops regrouped", "—", t.n_stops_regrouped + " of " + t.n_stops, "", "Stops that travel with a different set of customers in the two solves — vehicle numbers are solver labels, so companions are compared, not indices"],
+    ["Routing lever", "", "", sgnEurFull(t.routing_uplift_delta_eur), "Km saved priced at €1.15/km over 250 runs a year — this is the routing line in the bridge"],
+  ];
+  $("#pdRoutingTable").innerHTML =
+    `<tr><th>Measure</th><th class="num">Run A</th><th class="num">Run B</th><th class="num">Δ</th></tr>` +
+    rows.map((row) => `<tr title="${esc(row[4])}">
+      <td>${esc(row[0])}</td><td class="num">${esc(row[1])}</td><td class="num">${esc(row[2])}</td>
+      <td class="num ${row[0] === "Routing lever" ? moneyClass(t.routing_uplift_delta_eur) : ""}">${esc(row[3] || "—")}</td></tr>`).join("");
+  $("#pdRoutingNote").textContent = r.shared_solve
+    ? "Both runs ask for the same fleet, so one routing solve is shared between them — the routing line in the bridge is exactly €0, not a small number that happens to look like zero."
+    : "Each fleet is solved once with a fixed solution budget (never a wall clock), so the two solves are reproducible and the difference between them is real, not solver noise.";
+}
+
+function renderPdProof() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const ids = pd.identities;
+  const nOk = ids.filter((i) => i.ok).length;
+  $("#pdProofCount").innerHTML = `${nOk}<span class="of">/${ids.length}</span>`;
+  $("#pdProofStrip").innerHTML = ids
+    .map((i) => `<span class="p-cell ${i.ok ? "ok" : "fail"}" role="listitem" tabindex="0" title="${esc(i.statement)} — ${esc(String(i.lhs))} ${esc(i.op)} ${esc(String(i.rhs))}">${i.ok ? "✓" : "✕"}</span>`)
+    .join("");
+  const br = pd.bridge;
+  $("#pdProofMeta").innerHTML =
+    `<b>${nOk}/${ids.length}</b> change identities hold · the bridge's named causes sum to <b>${esc(sgnEurFull(br.attributed_eur))}</b>, ` +
+    `the whole difference between the two plans · unattributed rounding <b>€${Math.abs(br.rounding_eur).toFixed(4)}</b> ` +
+    `against a <b>€${br.rounding_tolerance_eur.toFixed(2)}</b> bound over ${num(br.rounding_values_spanned)} published values`;
+}
+
+function renderPlanDiff() {
+  const pd = STATE.planDiff;
+  if (!pd) return;
+  const h = pd.headline, sa = pd.run_a.spec, sb = pd.run_b.spec;
+  $("#pdPill").textContent = pd.all_ok ? "bridge reconciles · " + pd.identities.length + " identities" : "bridge does not close";
+  $("#pdInfo").title = pd.note;
+
+  const svc = (s) => (s.service_level == null ? "ABC-XYZ targets" : pct(s.service_level, 0) + " flat");
+  $("#pdSpecA").innerHTML =
+    `<b>${esc(pd.run_a.name)}</b><br />budget <b>${eurFull(sa.budget_eur)}</b> (${pct(sa.budget_pct_of_full, 0)} of range capital)<br />` +
+    `guardrail <b>±${pct(sa.max_change, 0)}</b> · service <b>${esc(svc(sa))}</b><br />` +
+    `PO cost <b>€${sa.order_cost_eur.toFixed(0)}</b> · fleet <b>${sa.n_vehicles} × ${num(sa.capacity_kg)} kg</b><br />` +
+    `<br />expected annual uplift <b>${eurFull(pd.run_a.kpis.expected_uplift_eur)}</b><br />` +
+    `${pd.run_a.kpis.skus_carried} SKUs carried · ${num(pd.run_a.kpis.km_saved)} km/run saved<br />` +
+    `inventory working capital <b>${eurFull(pd.run_a.kpis.working_capital_eur)}</b>`;
+
+  $("#pdTiles").innerHTML = [
+    { l: "Δ expected uplift", v: sgnEurFull(h.delta_eur), s: eurFull(h.uplift_a_eur) + " → " + eurFull(h.uplift_b_eur), cls: moneyClass(h.delta_eur) },
+    { l: "Range", v: h.n_skus_added + " in / " + h.n_skus_dropped + " out", s: pd.assortment.totals.skus_carried_a + " → " + pd.assortment.totals.skus_carried_b + " SKUs carried" },
+    { l: "Price moves", v: num(h.n_price_moves), s: "of " + pd.pricing.totals.n_skus + " SKUs re-priced" },
+    { l: "Policy changes", v: num(h.n_policy_changes), s: sgnEurFull(h.working_capital_delta_eur) + " working capital" },
+    { l: "Routing", v: h.routing_changed ? sgnEurFull(pd.routing.totals.routing_uplift_delta_eur) : "unchanged", s: h.routing_changed ? num(pd.routing.totals.km_saved_delta) + " km/run saved" : "same fleet, one shared solve" },
+    { l: "Δ % of run A", v: h.delta_pct == null ? "—" : (h.delta_pct >= 0 ? "+" : "") + pct(h.delta_pct), s: "modelled, not measured", cls: h.delta_pct == null ? "" : moneyClass(h.delta_pct) },
+  ].map((x) => `<div class="mini"><div class="m-label">${esc(x.l)}</div><div class="m-value${x.cls ? " " + x.cls : ""}">${kpiHTML(x.v)}</div><div class="m-sub">${esc(x.s)}</div></div>`).join("");
+
+  renderPdBridge(); renderPdBridgeTable(); renderPdProof();
+  renderPdRange(); renderPdPrices(); renderPdPolicy(); renderPdRouting();
+
+  $("#pdFoot").textContent = pd.note;
+  const caveats = (pd.caveats || []).concat(pd.provenance ? [pd.provenance] : []);
+  if (caveats.length) {
+    $("#pdCaveatList").innerHTML = caveats.map((c) => `<li>${esc(c)}</li>`).join("");
+    $("#pdCaveats").hidden = false;
+  }
+  // keep the form reproducing exactly the run the payload describes
+  $("#pdBudget").value = Math.round(sb.budget_pct_of_full * 100);
+  $("#pdBudgetLabel").textContent = Math.round(sb.budget_pct_of_full * 100) + "%";
+  setSeg("#pdGuard", "mc", String(sb.max_change));
+  setSeg("#pdService", "sl", sb.service_level == null ? "" : String(sb.service_level));
+  setSeg("#pdOrderCost", "oc", String(Math.round(sb.order_cost_eur)));
+  setSeg("#pdCapacity", "cap", String(Math.round(sb.capacity_kg)));
+}
+
+function pdRunBSpec() {
+  const share = +$("#pdBudget").value / 100;
+  const full = STATE.assort ? STATE.assort.full_capital : null;
+  const sl = segValue("#pdService", "sl");
+  return {
+    name: "Revised plan",
+    budget: full ? Math.round(full * share * 100) / 100 : null,
+    max_change: parseFloat(segValue("#pdGuard", "mc")),
+    service_level: sl === "" ? null : parseFloat(sl),
+    order_cost_eur: parseFloat(segValue("#pdOrderCost", "oc")),
+    capacity_kg: parseFloat(segValue("#pdCapacity", "cap")),
+  };
+}
+
+function setPdBusy(on, msg) {
+  const btn = $("#runPlanDiff");
+  btn.disabled = on;
+  btn.textContent = on ? "Running…" : "Run diff";
+  if (msg) $("#pdProofMeta").textContent = msg;
+}
+
+async function loadPlanDiff(body) {
+  setPdBusy(true, body ? "Re-running both plans…" : "Running both plans and bridging them…");
+  try {
+    const pd = body
+      ? await (async () => {
+          const r = await fetch("/api/plan-diff", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || "plan diff failed");
+          return j;
+        })()
+      : await getJSON("/api/plan-diff");
+    STATE.planDiff = pd;
+    renderPlanDiff();
+  } catch (err) {
+    $("#pdPill").textContent = "diff unavailable";
+    $("#pdProofMeta").textContent =
+      "Could not run the plan diff (" + (err && err.message ? err.message : "network error") + ").";
+  } finally {
+    setPdBusy(false);
+  }
+}
+
+function initPlanDiff() {
+  ["#pdGuard", "#pdService", "#pdOrderCost", "#pdCapacity"].forEach(initSeg);
+  $("#pdBudget").addEventListener("input", (e) => {
+    $("#pdBudgetLabel").textContent = e.target.value + "%";
+  });
+  $("#runPlanDiff").addEventListener("click", () => loadPlanDiff({ run_b: pdRunBSpec() }));
+}
+
 /* ------------------------------------------------------------ render all */
 function renderAll() {
   renderKPIs(); renderForecast(); renderBreakdown(); renderMargin();
   renderHeat(); renderRFM(); renderRoutes(); renderAssort(); renderActions();
   renderCrosssell(); renderKpiDrill(); renderInventory(); renderReliability();
+  renderPlanDiff();
 }
 
 /* ------------------------------------------------------------ focused views */
@@ -1299,7 +1646,11 @@ async function loadData() {
   $("#budgetSlider").value = Math.round((assort.budget / assort.full_capital) * 100);
   $("#loadError").hidden = true;
   renderAll();
-  loadProof(); // non-blocking: the strip fills in when the ledger lands
+  // Both are non-blocking: the first call computes server-side (the ledger
+  // re-runs every engine, the diff runs the plan stack twice and may need a
+  // second CVRP solve), so the panels fill in when their payloads land.
+  loadProof();
+  loadPlanDiff();
 }
 
 function showLoadError(err) {
@@ -1318,6 +1669,7 @@ async function boot() {
   initCrosssell();
   initImport();
   initWhy();
+  initPlanDiff();
   STATE.kpis = window.__INITIAL__.kpis;
   STATE.plan = window.__INITIAL__.plan;
   STATE.maxChange = STATE.plan && STATE.plan.max_change != null ? STATE.plan.max_change : 0.15;
